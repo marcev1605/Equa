@@ -1,0 +1,14 @@
+{"tx":[
+ {"id":1,"type":"in","amt":300000,"cat":"Sueldo","note":"Sueldo","date":"2026-09-01","card":false,"cardName":"","fixed":true,"inst":1},
+ {"id":2,"type":"out","amt":50000,"cat":"Casa","note":"TV","date":"2026-09-10","card":true,"cardName":"Visa ICBC","fixed":false,"inst":3},
+ {"id":3,"type":"out","amt":20000,"cat":"Comida","note":"Super","date":"2026-09-20","card":false,"cardName":"","fixed":false,"inst":1},
+ {"id":4,"type":"out","amt":9000,"cat":"Mascotas","note":"Alimento","date":"2026-09-05","card":false,"cardName":"","fixed":true,"inst":1,"end":24321,"skip":[24320]},
+ {"id":5,"type":"out","amt":1000,"cat":"Ocio","note":"Cine 1","date":"2026-09-01","card":false,"cardName":"","fixed":false,"inst":1,"rep":{"k":1,"n":2,"f":"m"},"g":5},
+ {"id":6,"type":"out","amt":1000,"cat":"Ocio","note":"Cine 2","date":"2026-10-01","card":false,"cardName":"","fixed":false,"inst":1,"rep":{"k":2,"n":2,"f":"m"},"g":5}
+],
+"cards":["Visa ICBC","Visa Bna"],"cardInfo":{"Visa ICBC":{"close":25,"months":{"24321":28}}},
+"pay":[{"id":10,"card":"Visa ICBC","i":24321,"amt":10000,"date":"2026-10-01"}],"payVer":2,
+"paid":{"1:24320":true,"3:24320":true,"2:24320":true},
+"open":150000,"cats":{"in":[],"out":["Mascotas"],"sav":["Auto"]},"hid":{"in":["Extra"],"out":["Ocio2"],"sav":[]},
+"sav":[{"id":20,"cat":"USD","amt":100000,"date":"2026-09-15","note":""},{"id":21,"tid":21,"cat":"USD","amt":-40000,"date":"2026-09-16","note":""},{"id":22,"tid":21,"cat":"Auto","amt":40000,"date":"2026-09-16","note":""}],
+"usd":120}

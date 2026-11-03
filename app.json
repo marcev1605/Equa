@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Equa",
+    "slug": "equa",
+    "scheme": "equa",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#07181e" },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.equa.app" },
+    "android": {
+      "package": "com.equa.app",
+      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#07181e" }
+    },
+    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/favicon.png" },
+    "plugins": ["expo-router", "expo-font"],
+    "experiments": { "typedRoutes": false }
+  }
+}
