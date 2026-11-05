@@ -25,6 +25,7 @@ declare module 'react-native' {
   export function useWindowDimensions(): { width: number; height: number };
   export function useColorScheme(): 'light' | 'dark' | null;
 }
+declare module 'expo-router/html' { export const ScrollViewStyleReset: any }
 declare module 'expo-router' { export const Slot: any, Stack: any, Redirect: any; export function usePathname(): string; export function useRouter(): any }
 declare module 'expo-file-system' { export class File { constructor(...a: any[]); exists: boolean; uri: string; create(): void; delete(): void; write(c: string | Uint8Array): void } export const Paths: { cache: any } }
 declare module 'expo-sharing' { export function isAvailableAsync(): Promise<boolean>; export function shareAsync(uri: string, o?: any): Promise<void> }

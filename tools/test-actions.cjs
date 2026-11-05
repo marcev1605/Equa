@@ -411,5 +411,17 @@ let n = 0; const t = async (name, fn) => { await fn(); n++; console.log('  ✓',
     const dirty = JSON.parse(buildBackup(S)); dirty.snapshot.cardInfo.Master.color = 'rosa'; dirty.snapshot.cardInfo.Master.last4 = 'abcd';
     const clean = parseBackup(JSON.stringify(dirty)).snapshot.cardInfo.Master || {}; assert.equal(clean.color, undefined); assert.equal(clean.last4, undefined);
   });
+  await t('pago masivo: marca varios gastos juntos, baja el disponible y se puede deshacer', async () => {
+    const { repo, A } = mk(); let S = await repo.load(); const m = 2026 * 12 + 9;
+    for (const [c, a] of [['Alquiler', 120000], ['Internet', 7200], ['Gimnasio', 8500]]) await A.addTransaction(S, { ...base, cat: c, amt: a, date: '2026-10-05' });
+    S = await repo.load(); const eng0 = createEngine(S, { y: 2026, m: 9, d: 2 }), a0 = eng0.availFor(m);
+    const items = S.tx.map(x => ({ id: x.id, i: m }));
+    assert.equal((await A.setPaidMany(items, true)).ok, true); S = await repo.load();
+    assert.equal(Object.keys(S.paid).length, 3);
+    assert.equal(createEngine(S, { y: 2026, m: 9, d: 2 }).availFor(m), a0 - 135700);
+    assert.equal((await A.setPaidMany(items, false)).ok, true); S = await repo.load();
+    assert.equal(Object.keys(S.paid).length, 0);
+    assert.equal((await A.setPaidMany([], true)).ok, false, 'sin selección no hace nada');
+  });
   console.log(`\n${n} pruebas OK`);
 })().catch(e => { console.error('✗', e); process.exit(1); });

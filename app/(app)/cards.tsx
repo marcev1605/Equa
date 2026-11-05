@@ -11,7 +11,7 @@ import { lookOf } from '../../src/domain/cardLook';
 import { CardDebt } from '../../src/ui/CardDebt';
 import { CardHero } from '../../src/ui/CardHero';
 import { ShareStrip } from '../../src/ui/CardShare';
-import { MonthNavView, Screen, useUI } from '../../src/ui/Shell';
+import { MonthNavView, Screen, Stat, useUI } from '../../src/ui/Shell';
 import { radius, useLayout, useTheme } from '../../src/ui/theme';
 
 export default function Tarjetas() {
@@ -28,22 +28,32 @@ export default function Tarjetas() {
   const cardView = (n: string) => {
     const q = eng.stmtD(n, gm + 1);
     return (
-      <Pressable key={n} accessibilityRole="button" accessibilityLabel={'Ver ' + n} onPress={() => setSel(n)} style={{ width: L.wide ? '48.5%' : '100%', marginTop: 14 }}>
+      <Pressable key={n} accessibilityRole="button" accessibilityLabel={'Ver ' + n} onPress={() => setSel(n)} style={{ width: L.wide ? '48.5%' : '100%', marginTop: L.wide ? 0 : 14, marginBottom: L.wide ? 24 : 0 }}>
         <CardHero name={n} due={q.due} paid={q.paid} rem={q.rem} sub={heroSub(eng, n, gm, !!(snap.cardInfo[n] || {}).months?.[gm])} look={lookOf(snap.cardInfo, names, n)} onMenu={() => F.cardMenu(n, gm, () => ui.openCardLook(n))} />
       </Pressable>
     );
   };
 
   return (
-    <Screen>
-      <MonthNavView caption="Cierre de" cur={gm} onChange={setGm} />
-      <T tone="mute" size={14}>Total a abonar de todas las tarjetas</T>
-      <T size={46} weight="bold" tone={total > 0.005 ? 'out' : 'ink'} style={{ letterSpacing: -2, lineHeight: 52 }}>{fmt(total)}</T>
-      <T tone="mute" size={13} style={{ marginTop: 6 }}>{names.length ? (total > 0.005 ? `Se paga en ${monthLabel(gm + 1, false)} · Pagado ${fmt(paid)} · Pendiente ${fmt(pend)}` : 'Sin resúmenes este mes') : 'Agrega tu primera tarjeta o elígela al cargar un gasto.'}</T>
-      {names.length ? <ShareStrip i={gm + 1} /> : null}
+    <Screen title="Tarjetas" month={<MonthNavView bar caption="Cierre de" cur={gm} onChange={setGm} />} summary={c => (
+      <>
+        <Stat hero flex={1.1} c={c} label="Total a abonar de todas las tarjetas" value={fmt(total)} tone={total > 0.005 ? 'out' : 'ink'} sub={names.length ? (total > 0.005 ? `Se paga en ${monthLabel(gm + 1, false)}` : 'Sin resúmenes este mes') : 'Agrega tu primera tarjeta'} />
+        <Stat c={c} label="Pagado" value={fmt(paid)} tone="in" sub={`de ${fmt(total)}`} />
+        <Stat c={c} label="Pendiente" value={fmt(pend)} tone={pend > 0.005 ? 'out' : 'ink'} sub={total > 0.005 ? `Se paga en ${monthLabel(gm + 1, false)}` : undefined} />
+      </>
+    )}>
+      {L.wide ? null : (
+        <>
+          <MonthNavView caption="Cierre de" cur={gm} onChange={setGm} />
+          <T tone="mute" size={14}>Total a abonar de todas las tarjetas</T>
+          <T size={46} weight="bold" tone={total > 0.005 ? 'out' : 'ink'} style={{ letterSpacing: -2, lineHeight: 52 }}>{fmt(total)}</T>
+          <T tone="mute" size={13} style={{ marginTop: 6 }}>{names.length ? (total > 0.005 ? `Se paga en ${monthLabel(gm + 1, false)} · Pagado ${fmt(paid)} · Pendiente ${fmt(pend)}` : 'Sin resúmenes este mes') : 'Agrega tu primera tarjeta o elígela al cargar un gasto.'}</T>
+        </>
+      )}
+      {names.length ? <View style={L.wide ? { marginBottom: 24 } : undefined}><ShareStrip i={gm + 1} /></View> : null}
       {names.length ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>{names.map(cardView)}</View> : null}
-      {names.length ? <View style={{ marginTop: 14 }}><CardDebt from={gm + 1} /></View> : null}
-      <Button kind="option" label="＋ Agregar tarjeta" onPress={() => F.addCard()} style={{ marginTop: 14 }} />
+      {names.length ? <View style={{ marginTop: L.wide ? 0 : 14 }}><CardDebt from={gm + 1} /></View> : null}
+      <Button kind="option" label="＋ Agregar tarjeta" onPress={() => F.addCard()} style={{ marginTop: L.wide ? 24 : 14 }} />
     </Screen>
   );
 }

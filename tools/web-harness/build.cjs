@@ -15,7 +15,8 @@ esbuild.buildSync({
   tsconfigRaw: '{"compilerOptions":{"jsx":"react-jsx"}}', loader: { '.png': 'dataurl' }, define: { 'process.env.NODE_ENV': '"development"', 'process.env.EXPO_PUBLIC_SUPABASE_URL': 'undefined', 'process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY': 'undefined' },
   logLevel: 'warning',
 });
-fs.writeFileSync(path.join(dist, 'index.html'), `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>html,body,#root{height:100%;margin:0}body{font-family:system-ui,sans-serif}input::placeholder,textarea::placeholder{color:var(--ph,#888)}</style>
+fs.writeFileSync(path.join(dist, 'index.html'), `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eef2f3" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0e2226" media="(prefers-color-scheme: dark)">
+<style>html,body{background-color:#eef2f3}@media (prefers-color-scheme:dark){html,body{background-color:#0e2226}}html,body,#root{height:100%;margin:0}body{font-family:system-ui,sans-serif}input::placeholder,textarea::placeholder{color:var(--ph,#888)}</style>
 <div id="root" style="display:flex;flex-direction:column"></div><script src="app.js"></script>`);
 console.log('build ok');

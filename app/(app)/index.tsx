@@ -7,7 +7,7 @@ import { Bar, Card, Check, Dots, H2, Item, Money, Row, T } from '../../src/ui/ki
 import { useFlows } from '../../src/ui/flows';
 import { dayLabel, fixedTxt, repTxt } from '../../src/ui/format';
 import { PendingSheet } from '../../src/ui/PendingSheet';
-import { MonthNav, Screen, useUI } from '../../src/ui/Shell';
+import { MonthNav, Screen, Stat, useUI } from '../../src/ui/Shell';
 import { radius, useLayout, useTheme } from '../../src/ui/theme';
 
 export default function Resumen() {
@@ -62,21 +62,7 @@ export default function Resumen() {
     g.rows.push(m.node);
   }
 
-  const left = (
-    <View style={L.wide ? { flex: 1 } : undefined}>
-      <T tone="mute" size={14}>Disponible ahora</T>
-      <T size={46} weight="bold" tone={avail < 0 ? 'out' : 'ink'} style={{ letterSpacing: -2, lineHeight: 52 }}>{fmt(avail)}</T>
-      <Row style={{ marginTop: 10 }}><T size={14}>Previsto del mes</T><Money v={prev} tone={prev < 0 ? 'out' : 'ink'} /></Row>
-      <T tone="mute" size={13}>
-        Ingresos {fmt(inc)} − gastos {fmt(out)}{net ? ` ${net > 0 ? '− ahorro' : '+ retiro de ahorro'} ${fmt(Math.abs(net))}` : ''} {carry < 0 ? '− deuda anterior' : '+ saldo anterior'} {fmt(Math.abs(carry))}
-      </T>
-      <View style={{ flexDirection: 'row', gap: 10, marginVertical: 14 }}>
-        {([['in', 'Ingresos ›', inc], ['out', 'Gastos ›', out]] as const).map(([ty, lb, v]) => (
-          <Pressable key={ty} accessibilityRole="button" onPress={() => setPend({ ty, full: true })} style={{ flex: 1, backgroundColor: t.card, borderColor: t.line, borderWidth: 1, borderRadius: radius.md - 2, padding: 10 }}>
-            <T tone="mute" size={14}>{lb}</T><Money v={v} tone={ty} size={18} />
-          </Pressable>
-        ))}
-      </View>
+  const pendCard = (
       <Card style={{ marginTop: 0 }}>
         <H2>Pendiente del mes</H2>
         {pendRows.map(r => (
@@ -87,6 +73,33 @@ export default function Resumen() {
           </Pressable>
         ))}
       </Card>
+  );
+  const formula = (
+    <T tone="mute" size={13}>
+      Ingresos {fmt(inc)} − gastos {fmt(out)}{net ? ` ${net > 0 ? '− ahorro' : '+ retiro de ahorro'} ${fmt(Math.abs(net))}` : ''} {carry < 0 ? '− deuda anterior' : '+ saldo anterior'} {fmt(Math.abs(carry))}
+    </T>
+  );
+  const stats = (c: boolean) => (
+    <>
+      <Stat hero flex={1.1} c={c} label="Disponible ahora" value={fmt(avail)} tone={avail < 0 ? 'out' : 'ink'} sub={`Previsto del mes ${fmt(prev)}`} />
+      <Stat c={c} label="Ingresos" value={fmt(inc)} tone="in" sub={`Cobrado ${fmt(pendRows[0].tot - pendRows[0].pe)} de ${fmt(pendRows[0].tot)}`} onPress={() => setPend({ ty: 'in', full: true })} />
+      <Stat c={c} label="Gastos" value={fmt(out)} tone="out" sub={`Pagado ${fmt(pendRows[1].tot - pendRows[1].pe)} de ${fmt(pendRows[1].tot)}`} onPress={() => setPend({ ty: 'out', full: true })} />
+    </>
+  );
+  const left = (
+    <View style={L.wide ? { flex: 1 } : undefined}>
+      <T tone="mute" size={14}>Disponible ahora</T>
+      <T size={46} weight="bold" tone={avail < 0 ? 'out' : 'ink'} style={{ letterSpacing: -2, lineHeight: 52 }}>{fmt(avail)}</T>
+      <Row style={{ marginTop: 10 }}><T size={14}>Previsto del mes</T><Money v={prev} tone={prev < 0 ? 'out' : 'ink'} /></Row>
+      {formula}
+      <View style={{ flexDirection: 'row', gap: 10, marginVertical: 14 }}>
+        {([['in', 'Ingresos ›', inc], ['out', 'Gastos ›', out]] as const).map(([ty, lb, v]) => (
+          <Pressable key={ty} accessibilityRole="button" onPress={() => setPend({ ty, full: true })} style={{ flex: 1, backgroundColor: t.card, borderColor: t.line, borderWidth: 1, borderRadius: radius.md - 2, padding: 10 }}>
+            <T tone="mute" size={14}>{lb}</T><Money v={v} tone={ty} size={18} />
+          </Pressable>
+        ))}
+      </View>
+      {pendCard}
     </View>
   );
   const right = (
@@ -106,9 +119,16 @@ export default function Resumen() {
   );
 
   return (
-    <Screen>
-      <MonthNav />
-      {L.wide ? <View style={{ flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}>{left}{right}</View> : <>{left}{right}</>}
+    <Screen title="Resumen" month={<MonthNav bar />} summary={stats}>
+      {L.wide ? (
+        <View style={{ flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}>
+          <View style={{ flex: 1, gap: 24 }}>
+            <Card style={{ marginTop: 0 }}><Row><T size={14}>Previsto del mes</T><Money v={prev} tone={prev < 0 ? 'out' : 'ink'} /></Row>{formula}</Card>
+            {pendCard}
+          </View>
+          {right}
+        </View>
+      ) : <><MonthNav />{left}{right}</>}
       <PendingSheet ty={pend?.ty ?? null} full={!!pend?.full} onClose={() => setPend(null)} />
     </Screen>
   );

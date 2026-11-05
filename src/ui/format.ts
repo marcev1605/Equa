@@ -25,3 +25,10 @@ export function dayLabel(iso: string, todayIso: string): string {
   const txt = `${wd} ${+iso.slice(8, 10)} de ${MONTHS_LC[+iso.slice(5, 7) - 1]}${iso.slice(0, 4) !== todayIso.slice(0, 4) ? ' de ' + iso.slice(0, 4) : ''}`;
   return n === base ? `Hoy · ${txt}` : n === base - 1 ? `Ayer · ${txt}` : txt.charAt(0).toUpperCase() + txt.slice(1);
 }
+
+/** "hoy, 5 de noviembre, a las 11:20" · "ayer, …" · "jueves 29 de octubre, a las 09:42" (con año si no es el actual). `iso` es "AAAA-MM-DDTHH:mm". */
+export function backupWhen(iso: string, todayIso: string): string {
+  const day = dayLabel(iso.slice(0, 10), todayIso), at = `a las ${iso.slice(11, 16)}`;
+  const m = day.match(/^(Hoy|Ayer) · (.*)$/);
+  return m ? `${m[1] === 'Hoy' ? 'hoy' : 'ayer'}, ${+iso.slice(8, 10)} de ${MONTHS_LC[+iso.slice(5, 7) - 1].toLowerCase()}, ${at}` : `${day.charAt(0).toLowerCase() + day.slice(1)}, ${at}`;
+}

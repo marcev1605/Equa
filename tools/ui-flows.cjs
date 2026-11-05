@@ -273,11 +273,138 @@ for(const [w,h,wide] of [[320,568,false],[390,700,false],[1280,420,true]]){const
   await down(0);await q.waitForTimeout(150);await q.getByRole('button',{name:'Mes siguiente'}).click();await q.waitForTimeout(250);
   ok((await cintas())===1,`cinta @${w}: arriba de todo solo está el botón del selector`);
   await down(300);await q.waitForTimeout(300);
-  ok((await cintas())===2&&(await q.innerText('body')).includes('↑ Volver a hoy · Octubre'),`cinta @${w}: al bajar en otro mes aparece debajo del logo`);
+  if(wide){ok((await cintas())===1&&!(await q.innerText('body')).includes('↑ Volver a hoy'),`web @${w}: el selector de mes queda fijo en el encabezado (no hace falta cinta)`)}
+  else ok((await cintas())===2&&(await q.innerText('body')).includes('↑ Volver a hoy · Octubre'),`cinta @${w}: al bajar en otro mes aparece debajo del logo`);
   if(!wide){const rb=await q.evaluate(()=>{const el=document.querySelector('[aria-label="Volver a hoy"]');const r=el.getBoundingClientRect();return {t:Math.round(r.top),b:Math.round(r.bottom),l:Math.round(r.left),r:Math.round(r.right)}});ok(rb.t>=36&&rb.b<=120&&rb.l>=0&&rb.r<=w,`cinta @${w}: queda pegada bajo el logo y dentro de la pantalla`)}
   await q.getByRole('button',{name:'Volver a hoy'}).first().click();await q.waitForTimeout(300);
-  ok((await q.locator('[aria-label="Mes elegido"]').innerText()).includes('Octubre 2026')&&(await scr()).y===0&&(await cintas())===0,`cinta @${w}: vuelve al mes de hoy, sube al inicio y desaparece`);
+  ok((await q.locator('[aria-label="Mes elegido"]').innerText()).includes('Octubre 2026')&&(wide||(await scr()).y===0)&&(await cintas())===0,`cinta @${w}: vuelve al mes de hoy, sube al inicio y desaparece`);
   await ch.close();}
+// web: encabezado fijo con título, selector de mes y totales que se achican al bajar; módulos sin superponerse y con aire
+for(const [w,h] of [[1024,520],[1280,520],[1920,700]]){const cw=await b.newContext({viewport:{width:w,height:h}});const q=await cw.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+  await q.addInitScript(sd=>{localStorage.setItem('equa-local-v1',sd)},seed);
+  const scroller=y=>q.evaluate(y=>{const el=[...document.querySelectorAll('*')].find(e=>e.scrollHeight>e.clientHeight+20&&/(auto|scroll)/.test(getComputedStyle(e).overflowY)&&e.clientWidth>400);if(!el)return -1;el.scrollTop=y;return el.scrollTop},y);
+  const rects=()=>q.evaluate(()=>[...document.querySelectorAll('[role=button],div')].filter(e=>e.children.length&&getComputedStyle(e).borderTopWidth==='1px'&&e.getBoundingClientRect().height>30&&e.getBoundingClientRect().width>120).map(e=>{const r=e.getBoundingClientRect();return {t:r.top,b:r.bottom,l:r.left,r:r.right}}));
+  const overlap=a=>{for(let i=0;i<a.length;i++)for(let j=i+1;j<a.length;j++){const x=a[i],y=a[j];const ix=Math.min(x.r,y.r)-Math.max(x.l,y.l),iy=Math.min(x.b,y.b)-Math.max(x.t,y.t);const inside=(p,q)=>p.l>=q.l-1&&p.r<=q.r+1&&p.t>=q.t-1&&p.b<=q.b+1;if(ix>2&&iy>2&&!inside(x,y)&&!inside(y,x))return true}return false};
+  for(const [rt,titulo,txts] of [['','Resumen',['Disponible ahora','Ingresos','Gastos']],['savings','Ahorro',['Total ahorrado','Ahorraste este mes','Programado']],['cards','Tarjetas',['Total a abonar de todas las tarjetas','Pagado','Pendiente']]]){
+    await q.goto(PAGE+'#/'+rt);await q.waitForTimeout(450);
+    const t0=await q.innerText('body');
+    ok(txts.every(x=>t0.includes(x))&&t0.includes(titulo),`web @${w} ${titulo}: encabezado con título y los 3 totales`);
+    ok(!overlap(await rects()),`web @${w} ${titulo}: los bloques no se superponen`);
+    const hh=()=>q.evaluate(()=>{const e=[...document.querySelectorAll('*')].find(x=>x.textContent&&x.children.length===0&&/^(Resumen|Ahorro|Tarjetas)$/.test(x.textContent)&&x.getBoundingClientRect().left>260);let p=e;for(let i=0;i<3;i++)p=p.parentElement;return Math.round(p.getBoundingClientRect().height)});
+    const h1=await hh();const got=await scroller(300);await q.waitForTimeout(350);const h2=await hh();
+    if(got>0)ok(h2<h1-30,`web @${w} ${titulo}: al bajar los totales se achican (${h1}px → ${h2}px) y siguen visibles`);
+    ok((await q.innerText('body')).includes(txts[0]),`web @${w} ${titulo}: los totales siguen a la vista al bajar`);
+    await scroller(0);await q.waitForTimeout(350);ok(Math.abs(await hh()-h1)<3,`web @${w} ${titulo}: al volver arriba se agrandan otra vez`);
+  }
+  // Ahorro: botones separados de las categorías
+  await q.goto(PAGE+'#/savings');await q.waitForTimeout(450);
+  const gap=await q.evaluate(()=>{const tl=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent==='Depositar');const ct=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent==='Por categoría');const box=n=>{while(n&&getComputedStyle(n).borderTopWidth!=='1px')n=n.parentElement;return n};const a=box(tl),c=box(ct);return Math.round(c.getBoundingClientRect().top-a.getBoundingClientRect().bottom)});
+  ok(gap>=20,`web @${w} Ahorro: Depositar/Retirar/Transferir separados de las categorías (${gap}px)`);
+  await cw.close();}
+// iPhone con isla/notch: la zona de arriba (y los costados en horizontal) lleva el mismo color de la app, en claro y oscuro
+for(const [esq,bg] of [['light','rgb(238, 242, 243)'],['dark','rgb(14, 34, 38)']])for(const [w,h,ins] of [[390,844,{top:59,bottom:34,left:0,right:0}],[844,390,{top:0,bottom:21,left:47,right:47}],[320,568,{top:20,bottom:0,left:0,right:0}]]){
+  const cx=await b.newContext({viewport:{width:w,height:h},colorScheme:esq});const q=await cx.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+  await q.addInitScript(([sd,i])=>{localStorage.setItem('equa-local-v1',sd);globalThis.__insets=i},[seed,ins]);await q.goto(PAGE+'#/');await q.waitForTimeout(450);
+  const r=await q.evaluate(()=>{const bgOf=e=>getComputedStyle(e).backgroundColor;const top=document.elementFromPoint(8,2),logo=document.querySelector('img[alt="Equa"]').getBoundingClientRect(),tab=document.querySelector('[role=tablist]').getBoundingClientRect();let n=top;while(n&&bgOf(n)==='rgba(0, 0, 0, 0)')n=n.parentElement;
+    return {html:bgOf(document.documentElement),body:bgOf(document.body),top:n?bgOf(n):null,logoTop:Math.round(logo.top),tabBottom:Math.round(tab.bottom),tabLeft:Math.round(tab.left),tabRight:Math.round(tab.right),hs:document.documentElement.scrollHeight>innerHeight+1||document.documentElement.scrollWidth>innerWidth+1,meta:[...document.querySelectorAll('meta[name=theme-color]')].map(m=>m.content+'|'+m.media)}});
+  ok(r.html===bg&&r.body===bg&&r.top===bg,`iPhone @${w}x${h} ${esq}: la zona de arriba y el fondo de la página son del color de la app`);
+  ok(r.logoTop>=ins.top&&r.tabBottom<=h-ins.bottom+1&&r.tabLeft>=ins.left&&r.tabRight<=w-ins.right&&!r.hs,`iPhone @${w}x${h} ${esq}: logo debajo de la cámara, barra sobre el borde inferior y nada fuera de la pantalla`);
+  ok(r.meta.length===2&&r.meta.some(m=>m.startsWith('#0e2226'))&&r.meta.some(m=>m.startsWith('#eef2f3')),`iPhone @${w}x${h} ${esq}: theme-color declarado para claro y oscuro`);
+  await cx.close();}
+// Datos: saldo inicial y respaldo en tarjetas separadas; último respaldo manual; confirmación al cambiar el saldo inicial
+for(const [w,h] of [[390,844],[1280,800]]){const cd=await b.rawContext({viewport:{width:w,height:h},acceptDownloads:true});const q=await cd.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+  await q.addInitScript(sd=>{if(!localStorage.getItem('equa-local-v1'))localStorage.setItem('equa-local-v1',sd)},seed);await q.goto(PAGE+'#/data');await q.waitForTimeout(450);
+  const body=()=>q.innerText('body');const open=()=>q.evaluate(()=>JSON.parse(localStorage.getItem('equa-local-v1')).open||0);
+  const box=t=>q.evaluate(t=>{const e=[...document.querySelectorAll('*')].find(x=>x.children.length===0&&x.textContent===t);let n=e;while(n&&getComputedStyle(n).borderTopWidth!=='1px')n=n.parentElement;const r=n.getBoundingClientRect();return {t:r.top,b:r.bottom,l:r.left,r:r.right}},t);
+  const a=await box('Saldo inicial'),r=await box('Respaldo');
+  ok(a.t!==r.t||a.l!==r.l,`datos @${w}: saldo inicial y respaldo son tarjetas distintas`);
+  ok(!(Math.min(a.r,r.r)-Math.max(a.l,r.l)>2&&Math.min(a.b,r.b)-Math.max(a.t,r.t)>2),`datos @${w}: las tarjetas no se superponen`);
+  ok((await body()).includes('Todavía no hiciste ningún respaldo manual'),`datos @${w}: sin respaldos avisa que todavía no hay ninguno`);
+  const dl=q.waitForEvent('download');await q.getByText('Guardar respaldo',{exact:true}).click();await dl;await q.waitForTimeout(300);
+  ok((await body()).includes('Último respaldo manual: hoy, 2 de octubre, a las 12:00'),`datos @${w}: muestra el último respaldo manual con día y hora`);
+  await q.reload();await q.waitForFunction(()=>document.body.innerText.includes('Último respaldo manual'),null,{timeout:5000}).catch(()=>{});
+  ok((await body()).includes('Último respaldo manual: hoy, 2 de octubre, a las 12:00'),`datos @${w}: el último respaldo se recuerda al volver a abrir`);
+  const before=await open();
+  // cancelar en la confirmación no cambia nada
+  await q.getByText('Cambiar',{exact:true}).click();await q.waitForTimeout(200);await q.locator('input').last().fill('250000');await q.getByText('Continuar',{exact:true}).click();await q.waitForTimeout(250);
+  const t1=await body();ok(t1.includes('¿Cambiar el saldo inicial')&&t1.includes('Diferencia')&&t1.includes('Tu disponible ahora pasa de')&&t1.includes('Sí, cambiar saldo'),`datos @${w}: pide confirmar y muestra qué cambia`);
+  await q.getByText('Cancelar',{exact:true}).last().click();await q.waitForTimeout(250);ok((await open())===before,`datos @${w}: cancelar la confirmación no cambia el saldo`);
+  // mismo monto: avisa que no hay cambios
+  await q.getByText('Cambiar',{exact:true}).click();await q.waitForTimeout(200);await q.locator('input').last().fill(String(before));await q.getByText('Continuar',{exact:true}).click();await q.waitForTimeout(250);
+  ok((await body()).includes('No hay cambios')&&(await open())===before,`datos @${w}: mismo monto avisa que no hay cambios`);
+  // confirmar
+  await q.getByText('Cambiar',{exact:true}).click();await q.waitForTimeout(200);await q.locator('input').last().fill('250000');await q.getByText('Continuar',{exact:true}).click();await q.waitForTimeout(250);
+  await q.getByText('Sí, cambiar saldo',{exact:true}).click();await q.waitForTimeout(350);
+  const t2=await body();ok(t2.includes('Saldo inicial guardado')&&t2.includes('$250.000')&&t2.includes('Tu disponible ahora pasa de'),`datos @${w}: avisa que se guardó con el antes y el después`);
+  await q.getByText('OK',{exact:true}).click();await q.waitForTimeout(250);ok((await open())===250000,`datos @${w}: confirmar guarda el nuevo saldo inicial`);
+  await cd.close();}
+// borrar desde los tres puntitos: gasto único, "solo este mes" y "este mes y los siguientes" piden confirmación
+for(const [w,h] of [[390,844],[1280,800]]){const cb=await b.newContext({viewport:{width:w,height:h}});const q=await cb.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+  await q.addInitScript(sd=>{if(!localStorage.getItem('equa-local-v1'))localStorage.setItem('equa-local-v1',sd)},seed);await q.goto(PAGE+'#/');await q.waitForTimeout(450);
+  const st=()=>q.evaluate(()=>JSON.parse(localStorage.getItem('equa-local-v1')));const body=()=>q.innerText('body');
+  const dots=async t=>{await q.evaluate(t=>{const e=[...document.querySelectorAll('*')].find(x=>x.children.length===0&&x.textContent===t);let n=e;while(n&&!n.querySelector('[aria-label="Opciones"]'))n=n.parentElement;n.querySelector('[aria-label="Opciones"]').click()},t);await q.waitForTimeout(200)};
+  const n0=(await st()).tx.length;
+  // gasto único (compra con tarjeta en 3 cuotas)
+  await dots('TV');await q.getByText('Borrar',{exact:true}).last().click();await q.waitForTimeout(250);
+  {const t=await body();ok(t.includes('¿Borrar "TV"')&&t.includes('3 cuotas')&&t.includes('No se puede deshacer'),`borrar gasto @${w}: pide confirmación y avisa que se borran las 3 cuotas`);}
+  await q.getByText('Cancelar',{exact:true}).last().click();await q.waitForTimeout(250);ok((await st()).tx.length===n0,`borrar gasto @${w}: cancelar no borra nada`);
+  await dots('TV');await q.getByText('Borrar',{exact:true}).last().click();await q.waitForTimeout(250);
+  await q.getByText('Borrar',{exact:true}).last().click();await q.waitForTimeout(350);ok((await st()).tx.length===n0-1&&!(await st()).tx.some(x=>x.note==='TV'),`borrar gasto @${w}: al confirmar se borra`);
+  // fijo: solo este mes
+  const f0=(await st()).tx.find(x=>x.note==='Alimento'||x.cat==='Mascotas');
+  await dots('Alimento');await q.getByText('Borrar solo este mes',{exact:true}).last().click();await q.waitForTimeout(250);
+  {const t=await body();ok(t.includes('¿Borrar "Alimento" solo de')&&t.includes('Los demás meses no cambian'),`borrar fijo @${w}: "solo este mes" pide confirmación`);}
+  await q.getByText('Cancelar',{exact:true}).last().click();await q.waitForTimeout(250);
+  ok(JSON.stringify((await st()).tx.find(x=>x.id===f0.id))===JSON.stringify(f0),`borrar fijo @${w}: cancelar deja el fijo igual`);
+  await dots('Alimento');await q.getByText('Borrar solo este mes',{exact:true}).last().click();await q.waitForTimeout(250);
+  await q.getByText('Borrar',{exact:true}).last().click();await q.waitForTimeout(350);
+  ok(JSON.stringify((await st()).tx.find(x=>x.id===f0.id))!==JSON.stringify(f0),`borrar fijo @${w}: al confirmar se salta ese mes`);
+  await cb.close();}
+// respaldo en el celular (web): usa el menú de compartir y NO abre el archivo en la pantalla de la app (al deslizar desde el borde no aparece el código)
+for(const cancel of [false,true]){const cm=await b.rawContext({viewport:{width:390,height:844},userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',hasTouch:true});const q=await cm.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+  await q.addInitScript(([sd,c])=>{localStorage.setItem('equa-local-v1',sd);window.__shared=[];navigator.canShare=o=>!!(o&&o.files&&o.files.length);navigator.share=async o=>{if(c){const e=new Error('cancel');e.name='AbortError';throw e}window.__shared.push({n:o.files[0].name,t:o.files[0].type,sz:o.files[0].size})}},[seed,cancel]);
+  await q.goto(PAGE+'#/data');await q.waitForTimeout(450);const u0=q.url();
+  await q.getByText('Guardar respaldo',{exact:true}).click();await q.waitForTimeout(400);
+  const sh=await q.evaluate(()=>window.__shared);const body=await q.innerText('body');
+  if(!cancel)ok(sh.length===1&&/^equa-respaldo-2026-10-02\.json$/.test(sh[0].n)&&sh[0].t==='application/json'&&sh[0].sz>100&&body.includes('Último respaldo manual: hoy, 2 de octubre, a las 12:00'),'respaldo en iPhone: abre el menú de compartir con el archivo .json y anota el respaldo');
+  else ok(sh.length===0&&body.includes('Todavía no hiciste ningún respaldo manual'),'respaldo en iPhone: si cierra el menú de compartir sin guardar, no cuenta como respaldo');
+  ok(q.url()===u0&&cm.pages().length===1&&!(await q.evaluate(()=>/"app":"equa"/.test(document.body.innerText))),'respaldo en iPhone: no navega ni abre el archivo en la pantalla de la app');
+  await cm.close();}
+// pago/cobro masivo desde "Por pagar" / "Por cobrar"
+for(const [w,h] of [[390,844],[1280,800]]){const cp=await b.rawContext({viewport:{width:w,height:h}});const q=await cp.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+  await q.addInitScript(sd=>{if(!localStorage.getItem('equa-local-v1'))localStorage.setItem('equa-local-v1',sd)},seed);await q.goto(PAGE+'#/');await q.waitForTimeout(450);
+  const body=()=>q.innerText('body');const paid=()=>q.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('equa-local-v1')).paid||{}).length);
+  const p0=await paid();
+  await q.getByText('Por pagar ›',{exact:true}).click();await q.waitForTimeout(300);
+  let t=await body();ok(t.includes('Seleccionar')&&!t.includes('Pagar seleccionados'),`pago masivo @${w}: "Por pagar" ofrece Seleccionar`);
+  // la ventana queda por encima del encabezado: tocar donde está el selector de mes cierra la ventana y no cambia de mes
+  await q.mouse.click(w>800?1240:w-30,w>800?42:20);await q.waitForTimeout(300);
+  t=await body();ok(!t.includes('Por pagar · Octubre')&&(await q.locator('[aria-label="Mes elegido"]').count()>=0)&&(w>800?t.includes('Octubre 2026'):true),`pago masivo @${w}: la ventana tapa también el encabezado fijo`);
+  await q.getByText('Por pagar ›',{exact:true}).click();await q.waitForTimeout(300);
+  await q.getByText('Seleccionar',{exact:true}).click();await q.waitForTimeout(250);
+  t=await body();ok(t.includes('Seleccionar todos')&&t.includes('0 seleccionados')&&t.includes('Se paga desde el resumen'),`pago masivo @${w}: modo selección con la tarjeta bloqueada ("se paga desde el resumen")`);
+  ok(!(await q.getByText('Pagar',{exact:true}).count()),`pago masivo @${w}: en selección el resumen de tarjeta no ofrece pagar acá`);
+  await q.getByText('Seleccionar todos',{exact:true}).click();await q.waitForTimeout(250);
+  t=await body();ok(/3 seleccionados/.test(t)&&t.includes('$11.000')&&t.includes('Tu disponible: $320.000 → $309.000'),`pago masivo @${w}: barra con cantidad, total y cómo queda el disponible`);
+  await q.getByText('Pagar seleccionados',{exact:true}).click();await q.waitForTimeout(300);
+  t=await body();ok(t.includes('¿Pagar 3 gastos juntos?')&&t.includes('Total: −$11.000')&&t.includes('Disponible ahora: $320.000 → $309.000')&&t.includes('Sí, pagar todos'),`pago masivo @${w}: pide confirmar y muestra el total`);
+  await q.getByText('Cancelar',{exact:true}).last().click();await q.waitForTimeout(250);ok((await paid())===p0,`pago masivo @${w}: cancelar no paga nada`);
+  await q.getByText('Pagar seleccionados',{exact:true}).click();await q.waitForTimeout(300);await q.getByText('Sí, pagar todos',{exact:true}).click();await q.waitForTimeout(400);
+  t=await body();ok(t.includes('3 pagos guardados')&&t.includes('−$11.000')&&t.includes('Tu disponible ahora pasa de $320.000 a $309.000'),`pago masivo @${w}: aviso de pagos guardados con el efecto`);
+  await q.getByText('OK',{exact:true}).click();await q.waitForTimeout(300);
+  ok((await paid())===p0+3,`pago masivo @${w}: los 3 gastos quedaron pagados (y la tarjeta no)`);
+  t=await body();ok(t.includes('Por pagar · Octubre')&&t.includes('$6.667')&&!t.includes('Seleccionar todos'),`pago masivo @${w}: sale del modo selección y queda solo lo de la tarjeta`);
+  await q.getByText('Cerrar',{exact:true}).last().click();await q.waitForTimeout(250);
+  // cobros
+  await q.getByText('Por cobrar ›',{exact:true}).click();await q.waitForTimeout(300);await q.getByText('Seleccionar',{exact:true}).click();await q.waitForTimeout(250);
+  await q.locator('[aria-label="Seleccionar Sueldo"]').click();await q.waitForTimeout(250);
+  t=await body();ok(t.includes('1 seleccionado')&&t.includes('$300.000')&&t.includes('Cobrar seleccionados'),`cobro masivo @${w}: selecciona el sueldo y ofrece "Cobrar seleccionados"`);
+  await q.getByText('Cobrar seleccionados',{exact:true}).click();await q.waitForTimeout(300);
+  t=await body();ok(t.includes('¿Cobrar 1 ingreso?')&&t.includes('Total: +$300.000')&&t.includes('Sí, cobrar'),`cobro masivo @${w}: pide confirmar`);
+  await q.getByText('Sí, cobrar',{exact:true}).click();await q.waitForTimeout(400);
+  t=await body();ok(t.includes('1 cobro guardado')&&t.includes('+$300.000')&&t.includes('$609.000'),`cobro masivo @${w}: aviso de cobro guardado con el disponible nuevo`);
+  await q.getByText('OK',{exact:true}).click();await q.waitForTimeout(300);ok((await paid())===p0+4,`cobro masivo @${w}: el sueldo quedó cobrado`);
+  await cp.close();}
 // estadísticas: no lleva el módulo de tarjeta vs. ingresos (vive solo en Tarjetas)
 {const ce=await b.newContext({viewport:{width:390,height:900}});const q=await ce.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
  await q.addInitScript(sd=>{localStorage.setItem('equa-local-v1',sd)},seed);await q.goto(PAGE+'#/stats');await q.waitForTimeout(500);
@@ -571,7 +698,7 @@ for(const [w,h] of [[320,568],[360,640],[390,844],[360,420],[1280,800]]){const c
 // diálogos largos en pantalla baja: el botón Cancelar queda a la vista y las opciones se desplazan
 {const cn=await b.newContext({viewport:{width:320,height:420}});const q=await cn.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
  await q.addInitScript(sd=>{localStorage.setItem('equa-local-v1',sd)},seed);await q.goto(PAGE+'#/data');await q.waitForTimeout(400);
- await q.getByText('Restaurar respaldo',{exact:true}).last().click();await q.waitForTimeout(150);
+ await q.getByText('Restaurar',{exact:true}).last().click();await q.waitForTimeout(150);
  await q.locator('textarea').fill(fs.readFileSync(path.join(root,'supabase/tests/legacy-sample.json'),'utf8'));
  await q.getByText('Revisar respaldo',{exact:true}).click();await q.waitForTimeout(250);
  const bb=await q.getByText('Cancelar',{exact:true}).last().boundingBox();
@@ -682,7 +809,13 @@ for(const w of [320,360,390,430]){const cn=await b.newContext({viewport:{width:w
  {const st=await q.evaluate(()=>JSON.parse(localStorage.getItem('equa-local-v1')));const m=st.tx.filter(x=>x.cat==='Mascotas');
   ok(!m.some(x=>x.of)&&m.some(x=>x.fixed&&x.amt===7000)&&!m.some(x=>x.fixed&&x.amt===9500),'mes editado + "este mes y siguientes": la edición puntual se absorbe y rige $7.000 desde octubre');}
  await q.locator('[aria-label="Opciones de Alimento"]').click();await q.waitForTimeout(200);
- await q.getByText('Borrar este mes y los siguientes',{exact:true}).last().click();await q.waitForTimeout(350);
+ await q.getByText('Borrar este mes y los siguientes',{exact:true}).last().click();await q.waitForTimeout(300);
+ {const tb=await q.innerText('body');ok(tb.includes('¿Borrar "Alimento" de')&&tb.includes('todos los meses siguientes'),'borrar este mes y los siguientes: pide confirmación antes de borrar');}
+ await q.getByText('Cancelar',{exact:true}).last().click();await q.waitForTimeout(250);
+ {const st=await q.evaluate(()=>JSON.parse(localStorage.getItem('equa-local-v1')));ok(st.tx.some(x=>x.cat==='Mascotas'),'borrar este mes y los siguientes: cancelar no borra nada');}
+ await q.locator('[aria-label="Opciones de Alimento"]').click();await q.waitForTimeout(200);
+ await q.getByText('Borrar este mes y los siguientes',{exact:true}).last().click();await q.waitForTimeout(300);
+ await q.getByText('Borrar',{exact:true}).last().click();await q.waitForTimeout(350);
  {const st=await q.evaluate(()=>JSON.parse(localStorage.getItem('equa-local-v1')));
   ok(!st.tx.some(x=>x.cat==='Mascotas'&&(x.of||(x.fixed&&x.amt!==9000))),'borrar este mes y los siguientes: no queda el fijo nuevo ni meses editados');}
  await q.getByText('‹ Volver a Previsión',{exact:true}).last().click();await q.waitForTimeout(200);
@@ -837,7 +970,7 @@ s=await state();ok(!s.categories.out.some(c=>c.name==='Ocio')&&s.tx.filter(x=>x.
 // 7) restaurar respaldo (primero uno roto, después el de la app anterior)
 await clickText('‹ Volver a Datos',false);await p.waitForTimeout(200);
 ok((await txt()).includes('Guardar respaldo')&&!(await txt()).includes('Categorías de gastos'),'editor de categorías: "Volver a Datos" regresa al menú');
-await clickText('Restaurar respaldo');await p.waitForTimeout(150);
+await clickText('Restaurar');await p.waitForTimeout(150);
 await p.locator('textarea').fill('esto no es un respaldo');
 await clickText('Revisar respaldo');await p.waitForTimeout(200);
 ok((await txt()).includes('no se puede leer'),'respaldo roto: avisa y no cambia nada');

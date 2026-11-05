@@ -35,10 +35,15 @@ export function useFlows() {
             { label: 'Editar este mes y los siguientes', onPress: () => onEdit(t, i, 'following') },
           ]
         : [{ label: t.rep ? 'Editar solo esta' : 'Editar', onPress: () => onEdit(t, i) }];
+      const nm = `"${t.note || t.cat}"`, what = t.type === 'in' ? 'Ingreso borrado' : 'Gasto borrado';
       if (isFixedLike) {
         options.push(
-          { label: 'Borrar solo este mes', destructive: true, onPress: () => void run(() => (t.fixed ? A.deleteFixedMonth(t, i) : A.deleteOne(t))) },
-          { label: 'Borrar este mes y los siguientes', destructive: true, onPress: () => void run(() => (t.fixed ? A.deleteFixedFrom(S, t, i) : A.deleteFromOverride(S, t, i))) },
+          { label: 'Borrar solo este mes', destructive: true, onPress: async () => {
+            if (await dlg.confirm({ message: `¿Borrar ${nm} solo de ${mon(i)}? Los demás meses no cambian.`, okLabel: 'Borrar', destructive: true })) await run(() => (t.fixed ? A.deleteFixedMonth(t, i) : A.deleteOne(t)), what);
+          } },
+          { label: 'Borrar este mes y los siguientes', destructive: true, onPress: async () => {
+            if (await dlg.confirm({ message: `¿Borrar ${nm} de ${mon(i)} y de todos los meses siguientes? Los meses anteriores no cambian.`, okLabel: 'Borrar', destructive: true })) await run(() => (t.fixed ? A.deleteFixedFrom(S, t, i) : A.deleteFromOverride(S, t, i)), what);
+          } },
         );
       } else {
         if (t.rep) {
@@ -50,7 +55,10 @@ export function useFlows() {
           if (nx > 0) options.push({ label: `Borrar esta y las ${nx} siguientes`, destructive: true, onPress: async () => {
             if (await dlg.confirm({ message: `¿Borrar esta repetición y las ${nx} siguientes?`, okLabel: 'Borrar', destructive: true })) await run(() => A.deleteSeriesFrom(S, t), 'Repeticiones borradas');
           } });
-        } else options.push({ label: 'Borrar', destructive: true, onPress: () => void run(() => A.deleteOne(t)) });
+        } else options.push({ label: 'Borrar', destructive: true, onPress: async () => {
+          const cuotas = t.card && t.inst > 1 ? ` Se borra la compra completa, con sus ${t.inst} cuotas.` : '';
+          if (await dlg.confirm({ message: `¿Borrar ${nm} (${fmt(t.amt)}, ${monthLabel(i)})?${cuotas} No se puede deshacer.`, okLabel: 'Borrar', destructive: true })) await run(() => A.deleteOne(t), what);
+        } });
       }
       dlg.actions({ title: `${t.note || t.cat} · ${monthLabel(i)}`, options });
     }

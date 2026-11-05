@@ -174,6 +174,12 @@ export function createActions(repo: Repository, today: () => Date = () => new Da
   const followingInSeries = (S: Snapshot, t: Tx) => t.rep ? S.tx.filter(x => x.g === t.g && x.date > t.date) : [];
   const deleteSeriesFrom = (S: Snapshot, t: Tx) => repo.deleteTx(S.tx.filter(x => x.g === t.g && x.date >= t.date).map(x => x.id));
   const setPaid = (txId: string, month: number, on: boolean) => repo.setSettled(txId, month, on);
+  /** Marca varios movimientos (id + mes) como pagados/cobrados, o los desmarca. */
+  async function setPaidMany(items: { id: string; i: number }[], on: boolean): Promise<Result> {
+    if (!items.length) return fail('No hay movimientos seleccionados');
+    for (const x of items) await repo.setSettled(x.id, x.i, on);
+    return ok;
+  }
 
   // ---------------- categorías ----------------
   const catList = (S: Snapshot, kind: CatKind) => S.categories[kind];
@@ -355,7 +361,7 @@ export function createActions(repo: Repository, today: () => Date = () => new Da
   const restoreBackup = (S: Snapshot) => repo.replaceAll(S);
 
   return {
-    eng, addTransaction, editTransaction, editFixedMonth, editFromOverride, deleteFromOverride, seriesOf, relinkOverrides, deleteFixedMonth, deleteFixedFrom, deleteOne, followingInSeries, deleteSeriesFrom, setPaid,
+    eng, addTransaction, editTransaction, editFixedMonth, editFromOverride, deleteFromOverride, seriesOf, relinkOverrides, deleteFixedMonth, deleteFixedFrom, deleteOne, followingInSeries, deleteSeriesFrom, setPaid, setPaidMany,
     catDup, addCategory, removeCategory, restoreCategory, categoryUsage, deleteCategoryForever, setUsd,
     addCard, renameCard, setClosing, setClosingFor, setCardLook, deleteCard, payInfo, pay, undoPayment,
     balOf, todayIso, availWith, checkSavMove, savMove, savAdjust, savTransfer, savDeletePlan, savDelete, setOpening, exportBackup, restoreBackup,

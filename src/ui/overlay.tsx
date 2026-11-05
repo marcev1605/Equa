@@ -19,7 +19,7 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
   return (
     <OverlayCtx.Provider value={api}>
       {children}
-      {list.map(e => <View key={e.id} style={StyleSheet.absoluteFill} pointerEvents="box-none">{e.node}</View>)}
+      {list.map(e => <View key={e.id} style={[StyleSheet.absoluteFill, { zIndex: 100 }]} pointerEvents="box-none">{e.node}</View>)}
     </OverlayCtx.Provider>
   );
 }

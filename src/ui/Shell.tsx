@@ -67,23 +67,53 @@ export function Logo({ size = 44, compact = false }: { size?: number; compact?: 
 interface HomeLink { label: string; go: () => void }
 const HomeCtx = createContext<(h: HomeLink | null) => void>(() => {});
 
+/** Bloque de total del encabezado (web): grande arriba de todo; al bajar se achica a una fila. */
+export function Stat({ label, value, tone = 'ink', sub, c, hero, flex = 1, onPress }: { label: string; value: string; tone?: 'ink' | 'in' | 'out'; sub?: string; c: boolean; hero?: boolean; flex?: number; onPress?: () => void }) {
+  const t = useTheme();
+  const box = { flex, minWidth: 0, backgroundColor: t.card, borderColor: t.line, borderWidth: 1, borderRadius: c ? radius.sm : radius.md } as const;
+  const inner = c ? (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 8, paddingHorizontal: 14 }}>
+      <T tone="mute" size={12} numberOfLines={1} style={{ flexShrink: 1 }}>{label}{onPress ? ' ›' : ''}</T>
+      <T size={hero ? 20 : 18} weight="bold" tone={tone} numberOfLines={1}>{value}</T>
+    </View>
+  ) : (
+    <View style={{ padding: 18 }}>
+      <T tone="mute" size={13}>{label}{onPress ? ' ›' : ''}</T>
+      <T size={hero ? 44 : 24} weight="bold" tone={tone} style={{ letterSpacing: hero ? -2 : -0.5, lineHeight: hero ? 50 : 30 }}>{value}</T>
+      {sub ? <T tone="mute" size={12.5} style={{ marginTop: 2 }}>{sub}</T> : null}
+    </View>
+  );
+  return onPress ? <Pressable accessibilityRole="button" onPress={onPress} style={box}>{inner}</Pressable> : <View style={box}>{inner}</View>;
+}
+
 /**
  * Contenedor de pantalla: scroll + ancho máximo centrado según el dispositivo.
- * En el celular lleva arriba el logo compacto fijo (línea y sombra suave al deslizar); cuando se está en otro mes
- * y el selector ya salió de la pantalla, debajo del logo aparece la cinta "Volver a hoy".
+ * Celular: logo compacto fijo arriba (línea y sombra suave al deslizar); si se está en otro mes y el selector ya salió
+ * de la pantalla, debajo del logo aparece la cinta "Volver a hoy".
+ * Web ancha (con `title`): encabezado fijo con el título, el selector de mes y los totales (`summary`), que se achican al bajar.
  */
-export function Screen({ children }: { children: React.ReactNode }) {
+export function Screen({ children, title, month, summary }: { children: React.ReactNode; title?: string; month?: React.ReactNode; summary?: (compact: boolean) => React.ReactNode }) {
   const L = useLayout(), t = useTheme();
   const ref = useRef<{ scrollTo: (o: { y: number; animated: boolean }) => void } | null>(null);
-  const [y, setY] = useState(0);
+  const [y, setY] = useState(0), [compact, setCompact] = useState(false);
   const [home, setHome] = useState<HomeLink | null>(null);
-  const shadow = !L.wide && y > 4, ribbon = !!home && y > 80;
+  const head = L.wide && !!title;
+  const line = y > 4, ribbon = !L.wide && !!home && y > 80, c = head && compact;
+  const lift = line ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 } : {};
   return (
     <HomeCtx.Provider value={setHome}>
       <View style={{ flex: 1 }}>
-        <View style={{ width: '100%', zIndex: 5, backgroundColor: t.bg, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: shadow ? t.line : 'transparent',
-          ...(shadow ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 } : {}) }}>
+        <View style={{ width: '100%', zIndex: 5, backgroundColor: t.bg, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: line && (head || !L.wide) ? t.line : 'transparent', ...(head || !L.wide ? lift : {}) }}>
           {!L.wide ? <View style={{ height: 40, alignItems: 'center', justifyContent: 'center' }}><Logo size={22} compact /></View> : null}
+          {head ? (
+            <View style={{ width: '100%', maxWidth: L.content, paddingHorizontal: 16, paddingTop: c ? 14 : 24, paddingBottom: c ? 12 : 18 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: summary ? (c ? 10 : 18) : 0 }}>
+                <T size={c ? 21 : 26} weight="bold" style={{ letterSpacing: -0.6 }}>{title}</T>
+                {month}
+              </View>
+              {summary ? <View style={{ flexDirection: 'row', gap: c ? 12 : 20 }}>{summary(c)}</View> : null}
+            </View>
+          ) : null}
           {ribbon ? (
             <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, top: '100%', alignItems: 'center' }}>
               <Pressable accessibilityRole="button" accessibilityLabel="Volver a hoy" onPress={() => { home.go(); ref.current?.scrollTo({ y: 0, animated: false }); }}
@@ -93,8 +123,8 @@ export function Screen({ children }: { children: React.ReactNode }) {
             </View>
           ) : null}
         </View>
-        <ScrollView ref={ref} scrollEventThrottle={32} onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => setY(e.nativeEvent.contentOffset.y)} contentContainerStyle={{ alignItems: 'center', paddingBottom: L.wide ? 40 : 150 }} keyboardShouldPersistTaps="handled">
-          <View style={{ width: '100%', maxWidth: L.content, paddingHorizontal: 16, paddingTop: L.wide ? 12 : 4 }}>{children}</View>
+        <ScrollView ref={ref} scrollEventThrottle={32} onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => { const yy = e.nativeEvent.contentOffset.y; setY(yy); if (head) setCompact(k => (k ? yy > 8 : yy > 40)); }} contentContainerStyle={{ alignItems: 'center', paddingBottom: L.wide ? 40 : 150 }} keyboardShouldPersistTaps="handled">
+          <View style={{ width: '100%', maxWidth: L.content, paddingHorizontal: 16, paddingTop: L.wide ? (head ? 6 : 12) : 4 }}>{children}</View>
         </ScrollView>
       </View>
     </HomeCtx.Provider>
@@ -120,7 +150,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <UICtx.Provider value={ui}>
-      <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: insets.top }}>
+      <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }}>
         {L.wide ? (
           <View style={{ flex: 1, flexDirection: 'row' }}>
             <View style={{ width: 248, borderRightWidth: 1, borderRightColor: t.line, backgroundColor: t.card, padding: 16, gap: 4 }}>
@@ -143,7 +173,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <>
             {content}
             {/* barra flotante: suspendida sobre el contenido, con sombra suave; el ícono activo va en un recuadro amarillo */}
-            <View accessibilityRole="tablist" style={{ position: 'absolute', left: L.width < 340 ? 6 : 10, right: L.width < 340 ? 6 : 10, bottom: 8 + insets.bottom, flexDirection: 'row', backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 22, paddingVertical: 6, paddingHorizontal: 2,
+            <View accessibilityRole="tablist" style={{ position: 'absolute', left: (L.width < 340 ? 6 : 10) + insets.left, right: (L.width < 340 ? 6 : 10) + insets.right, bottom: 8 + insets.bottom, flexDirection: 'row', backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 22, paddingVertical: 6, paddingHorizontal: 2,
               shadowColor: '#12343b', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}>
               {NAV.map(n => (
                 <Pressable key={n.path} accessibilityRole="link" accessibilityLabel={n.label} accessibilityState={{ selected: active(n.path) }} onPress={() => go(n.path)}
@@ -156,13 +186,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {menu ? (
               <>
                 <Pressable accessibilityLabel="Cerrar menú" onPress={() => setMenu(false)} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: t.overlay }} />
-                <View accessibilityLabel="Nuevo movimiento" style={{ position: 'absolute', right: 18, bottom: 82 + 56 + 14 + insets.bottom, gap: 12, alignItems: 'flex-end' }}>
+                <View accessibilityLabel="Nuevo movimiento" style={{ position: 'absolute', right: 18 + insets.right, bottom: 82 + 56 + 14 + insets.bottom, gap: 12, alignItems: 'flex-end' }}>
                   {KINDS.map(k => <NewOption key={k.kind} k={k} floating onPress={() => ui.openNew(k.kind)} />)}
                 </View>
               </>
             ) : null}
             <Pressable accessibilityRole="button" accessibilityLabel="Agregar movimiento" accessibilityState={{ expanded: menu }} onPress={() => setMenu(m => !m)}
-              style={{ position: 'absolute', right: 18, bottom: 82 + insets.bottom, width: 56, height: 56, borderRadius: 28, backgroundColor: t.acc, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6, transform: [{ rotate: menu ? '45deg' : '0deg' }] }}>
+              style={{ position: 'absolute', right: 18 + insets.right, bottom: 82 + insets.bottom, width: 56, height: 56, borderRadius: 28, backgroundColor: t.acc, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6, transform: [{ rotate: menu ? '45deg' : '0deg' }] }}>
               <Icon name="plus" color={t.accInk} size={28} width={2.4} />
             </Pressable>
           </>
@@ -176,16 +206,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
 }
 
 /** Selector de mes del estado global (Resumen y Estadísticas) */
-export function MonthNav() {
+export function MonthNav({ bar }: { bar?: boolean }) {
   const { cur, setCur } = useStore();
-  return <MonthNavView cur={cur} onChange={setCur} />;
+  return <MonthNavView cur={cur} onChange={setCur} bar={bar} />;
 }
 
 /**
  * Selector de mes: mes anterior · MES ACTUAL · mes siguiente. Tocar un vecino avanza o retrocede;
  * "Volver a hoy" aparece cuando se está en otro mes. `caption` agrega una leyenda chica sobre el mes (ej. "Cierre de").
  */
-export function MonthNavView({ cur, onChange, caption }: { cur: number; onChange: (i: number) => void; caption?: string }) {
+export function MonthNavView({ cur, onChange, caption, bar }: { cur: number; onChange: (i: number) => void; caption?: string; bar?: boolean }) {
   const t = useTheme(), { eng } = useStore(), home = eng.now;
   const publish = useContext(HomeCtx), change = useRef(onChange);
   change.current = onChange;
@@ -198,11 +228,27 @@ export function MonthNavView({ cur, onChange, caption }: { cur: number; onChange
     const txt = `${monthShort(i)}${yy}`;
     return (
       <Pressable accessibilityRole="button" accessibilityLabel={dir === 'prev' ? 'Mes anterior' : 'Mes siguiente'} onPress={() => onChange(i)}
-        style={({ pressed }: { pressed: boolean }) => ({ flex: 1, minWidth: 0, minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: dir === 'prev' ? 'flex-start' : 'flex-end', paddingHorizontal: 4, opacity: pressed ? 0.6 : 1 })}>
+        style={({ pressed }: { pressed: boolean }) => ({ ...(bar ? { minWidth: 70, paddingHorizontal: 10 } : { flex: 1, minWidth: 0 }), minHeight: bar ? 38 : 46, flexDirection: 'row', alignItems: 'center', justifyContent: dir === 'prev' ? 'flex-start' : 'flex-end', paddingHorizontal: 4, opacity: pressed ? 0.6 : 1 })}>
         <T size={15} weight="semi" tone="mute" numberOfLines={1}>{dir === 'prev' ? `‹ ${txt}` : `${txt} ›`}</T>
       </Pressable>
     );
   };
+  if (bar) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        {cur !== home ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Volver a hoy" onPress={() => onChange(home)} style={{ marginRight: 8, borderWidth: 1, borderColor: t.line, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
+            <T size={12} weight="semi" tone="mute">Volver a hoy</T>
+          </Pressable>
+        ) : null}
+        {side(cur - 1, 'prev')}
+        <View accessibilityLabel="Mes elegido" style={{ backgroundColor: t.ink, borderRadius: radius.sm, paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center' }}>
+          <T size={14} weight="bold" style={{ color: t.card }}>{`${caption ? caption + ' ' : ''}${monthName(cur)} ${Math.floor(cur / 12)}`}</T>
+        </View>
+        {side(cur + 1, 'next')}
+      </View>
+    );
+  }
   return (
     <View style={{ marginVertical: 12, width: '100%', maxWidth: 460, alignSelf: 'center' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

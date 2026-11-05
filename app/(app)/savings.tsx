@@ -7,7 +7,7 @@ import { useDialogs } from '../../src/ui/dialogs';
 import { Bar, Button, Card, Dots, H2, Item, Money, Row, T } from '../../src/ui/kit';
 import { Icon, type IconName } from '../../src/ui/icons';
 import { useFlows } from '../../src/ui/flows';
-import { MonthNavView, Screen, useUI } from '../../src/ui/Shell';
+import { MonthNavView, Screen, Stat, useUI } from '../../src/ui/Shell';
 import { catColor, radius, useLayout, useTheme } from '../../src/ui/theme';
 
 export default function Ahorro() {
@@ -44,6 +44,14 @@ export default function Ahorro() {
     const n = await dlg.ask({ title: 'Nombre de la categoría de ahorro' });
     if (n) await run(() => A.addCategory(snap, 'sav', n), 'Categoría agregada');
   }
+  const ms0 = eng.monthSaving(eng.now), rate0 = ms0.pct == null ? null : ms0.pct < 1 ? '<1' : String(Math.round(ms0.pct));
+  const stats = (c: boolean) => (
+    <>
+      <Stat hero flex={1.1} c={c} label="Total ahorrado" value={fmt(tot)} sub={`${Math.abs(totGain) > 0.005 ? `Rendimiento ${totGain > 0 ? '+' : '−'}${fmt(Math.abs(totGain))} · ` : ''}Disponible ahora ${fmt(eng.availFor(eng.now))}`} />
+      <Stat c={c} label={ms0.net < 0 ? 'Retiraste este mes' : 'Ahorraste este mes'} value={`${ms0.net < 0 ? '−' : ''}${fmt(Math.abs(ms0.net))}`} tone={ms0.net < 0 ? 'out' : 'in'} sub={rate0 != null ? `${rate0}% de tus ingresos` : 'Sin movimientos este mes'} />
+      <Stat c={c} label="Programado" value={fmt(Math.abs(pDep - pRet))} tone={pDep - pRet < 0 ? 'out' : 'ink'} sub={pend.length ? `${pend.length === 1 ? '1 movimiento' : `${pend.length} movimientos`} · próximo ${dd_mm_yyyy(pend[0].date)}` : 'Sin movimientos programados'} />
+    </>
+  );
   const onEdit = (x: Sav) => ui.openSav('in', x);
 
   const categories = (
@@ -104,17 +112,21 @@ export default function Ahorro() {
   );
 
   return (
-    <Screen>
-      <T tone="mute" size={14}>Total ahorrado</T>
-      <T size={46} weight="bold" style={{ letterSpacing: -2, lineHeight: 52 }}>{fmt(tot)}</T>
-      {Math.abs(totGain) > 0.005 && <T size={14} weight="semi" tone={totGain > 0 ? 'in' : 'out'}>Rendimiento acumulado: {totGain > 0 ? '+' : '−'}{fmt(Math.abs(totGain))}</T>}
-      <T tone="mute" size={13}>Se alimenta con transferencias desde tu cuenta disponible. Disponible ahora: {fmt(eng.availFor(eng.now))}</T>
+    <Screen title="Ahorro" summary={stats}>
+      {L.wide ? null : (
+        <>
+          <T tone="mute" size={14}>Total ahorrado</T>
+          <T size={46} weight="bold" style={{ letterSpacing: -2, lineHeight: 52 }}>{fmt(tot)}</T>
+          {Math.abs(totGain) > 0.005 && <T size={14} weight="semi" tone={totGain > 0 ? 'in' : 'out'}>Rendimiento acumulado: {totGain > 0 ? '+' : '−'}{fmt(Math.abs(totGain))}</T>}
+          <T tone="mute" size={13}>Se alimenta con transferencias desde tu cuenta disponible. Disponible ahora: {fmt(eng.availFor(eng.now))}</T>
+        </>
+      )}
       {pend.length ? (
-        <View accessibilityLabel="Movimientos programados"><T tone="mute" size={13}>
+        <View accessibilityLabel="Movimientos programados" style={L.wide ? { marginBottom: 20 } : undefined}><T tone="mute" size={13}>
           Programado: {pend.length === 1 ? '1 movimiento' : `${pend.length} movimientos`}, el próximo el {dd_mm_yyyy(pend[0].date)}{pDep > 0.005 ? ` · depósitos +${fmt(pDep)}` : ''}{pRet > 0.005 ? ` · retiros −${fmt(pRet)}` : ''}. Todavía no cambian tu cuenta ni este total.
         </T></View>
       ) : null}
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, maxWidth: L.wide ? 560 : undefined }}>
+      <View style={{ flexDirection: 'row', gap: L.wide ? 20 : 8, marginTop: L.wide ? 0 : 14, marginBottom: L.wide ? 24 : 0 }}>
         <Tile icon="deposit" label="Depositar" sub="Sumar ahorro" color={th.inc} onPress={() => ui.openSav('in')} />
         <Tile icon="withdraw" label="Retirar" sub="Sacar plata" color={th.out} onPress={() => ui.openSav('out')} />
         <Tile icon="swap" label="Transferir" sub="Entre categorías" color={th.sav} onPress={() => (cats.length < 2 ? dlg.toast('Necesitas al menos dos categorías') : !cats.some(c => A.balOf(snap.sav, c.name) > 0.005) ? dlg.toast('Ninguna categoría tiene saldo para transferir') : ui.openSav('tr'))} />

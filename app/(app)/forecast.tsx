@@ -220,7 +220,7 @@ export default function Prevision() {
   const pr = pressure(allRows, now), ends = endingInstallments(eng, now);
   const snap: any = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory' } : null;
   return (
-    <Screen>
+    <Screen title="Previsión">
       <T tone="mute" size={14}>Disponible hoy</T>
       <T size={46} weight="bold" tone={av < 0 ? 'out' : 'ink'} style={{ letterSpacing: -2, lineHeight: 52 }}>{fmt(av)}</T>
       <T tone="mute" size={13} style={{ marginTop: 6 }}>Lo cobrado menos lo pagado hasta hoy, más el saldo anterior. Cada mes parte del previsto del mes anterior.</T>

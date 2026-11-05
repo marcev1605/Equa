@@ -165,13 +165,12 @@ export default function Estadisticas() {
   );
 
   return (
-    <Screen>
-      <MonthNav />
+    <Screen title="Estadísticas" month={<MonthNav bar />}>
       {L.wide ? (
         <View style={{ flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}>
-          <View style={{ flex: 1, gap: 14 }}>{summary}{chart}{pacing}{savings}</View><View style={{ flex: 1, gap: 14 }}>{fv}{cats}{byCard}</View>
+          <View style={{ flex: 1, gap: 24 }}>{summary}{chart}{pacing}{savings}</View><View style={{ flex: 1, gap: 24 }}>{fv}{cats}{byCard}</View>
         </View>
-      ) : <>{summary}{chart}{pacing}{fv}{byCard}{savings}{cats}</>}
+      ) : <><MonthNav />{summary}{chart}{pacing}{fv}{byCard}{savings}{cats}</>}
     </Screen>
   );
 }

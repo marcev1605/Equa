@@ -1,7 +1,7 @@
 import React from 'react';
 export const StatusBar = () => null;
 export const SafeAreaProvider = ({ children }: any) => <>{children}</>;
-export const useSafeAreaInsets = () => ({ top: 0, bottom: 0, left: 0, right: 0 });
+export const useSafeAreaInsets = () => (globalThis as any).__insets ?? { top: 0, bottom: 0, left: 0, right: 0 };
 export const useFonts = () => [true];
 export const BricolageGrotesque_400Regular = 'BricolageGrotesque_400Regular', BricolageGrotesque_600SemiBold = 'BricolageGrotesque_600SemiBold', BricolageGrotesque_800ExtraBold = 'BricolageGrotesque_800ExtraBold';
 declare const __SEED__: string | undefined;

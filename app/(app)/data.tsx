@@ -1,24 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Share, View } from 'react-native';
+import { lastBackup, markBackup } from '../../src/data/backupLog';
 import type { CatKind } from '../../src/domain/types';
 import { parseBackup } from '../../src/domain/backup';
 import { dd_mm_yyyy, fmtMoney as fmt, isoLocal } from '../../src/domain/dates';
 import { useAuth } from '../../src/state/auth';
 import { useStore } from '../../src/state/store';
 import { useDialogs } from '../../src/ui/dialogs';
-import { BackLink, Button, Card, Collapsible, Field, H2, Item, T } from '../../src/ui/kit';
+import { BackLink, Button, Card, Collapsible, Field, H2, Item, Row, T } from '../../src/ui/kit';
 import { ReportsView } from '../../src/ui/ReportsView';
+import { backupWhen } from '../../src/ui/format';
 import { Screen } from '../../src/ui/Shell';
-import { useLayout } from '../../src/ui/theme';
+import { radius, useLayout, useTheme } from '../../src/ui/theme';
 
 const GROUPS: { kind: CatKind; title: string }[] = [
   { kind: 'out', title: 'Categorías de gastos' }, { kind: 'in', title: 'Categorías de ingresos' }, { kind: 'sav', title: 'Categorías de ahorro' },
 ];
 
 export default function Datos() {
-  const { snap, eng, A, run } = useStore(), dlg = useDialogs(), auth = useAuth(), L = useLayout();
+  const { snap, eng, A, run } = useStore(), dlg = useDialogs(), auth = useAuth(), L = useLayout(), t = useTheme();
   const [open, setOpen] = useState<Record<string, boolean>>({}), [view, setView] = useState<'main' | 'cats' | 'reports'>('main');
-  const [restoring, setRestoring] = useState(false), [json, setJson] = useState('');
+  const [restoring, setRestoring] = useState(false), [json, setJson] = useState(''), [lastBk, setLastBk] = useState<string | null | undefined>(undefined);   // undefined = todavía leyendo
+  useEffect(() => { void lastBackup().then(setLastBk); }, []);
 
   async function add(kind: CatKind) {
     const n = await dlg.ask({ title: kind === 'sav' ? 'Nombre de la categoría de ahorro' : 'Nueva categoría de ' + (kind === 'in' ? 'ingresos' : 'gastos') });
@@ -56,20 +59,44 @@ export default function Datos() {
       { label: 'Eliminar para siempre', destructive: true, onPress: () => { void forever(kind, name); } },
     ] });
   }
+  /** Cambiar el saldo inicial: pide el monto y después una segunda confirmación que muestra qué cambia. */
   async function opening() {
-    const v = await dlg.ask({ title: 'Saldo inicial', initial: snap.open || '', type: 'number' });
+    const before = snap.open || 0;
+    const v = await dlg.ask({ title: 'Saldo inicial: dinero que tenías antes de tu primer movimiento', initial: before || '', type: 'number', okLabel: 'Continuar' });
     if (v == null) return;
     const n = parseFloat(v.replace(',', '.'));
     if (isNaN(n)) { dlg.toast('Escribe un monto válido'); return; }
-    await run(() => A.setOpening(n));
+    if (Math.abs(n - before) < 0.005) { dlg.toast(`El saldo inicial ya es ${fmt(before)}. No hay cambios`); return; }
+    const diff = n - before, avail = eng.availFor(eng.now), sg = (x: number) => `${x > 0 ? '+' : '−'}${fmt(Math.abs(x))}`;
+    const ok = await dlg.confirm({
+      message: `¿Cambiar el saldo inicial de ${fmt(before)} a ${fmt(n)}?\nDiferencia: ${sg(diff)}\nTu disponible ahora pasa de ${fmt(avail)} a ${fmt(avail + diff)}, y lo mismo se mueve en todos los meses.\nTus movimientos no se tocan y podés volver a cambiarlo cuando quieras.`,
+      okLabel: 'Sí, cambiar saldo',
+    });
+    if (!ok) return;
+    if (await run(() => A.setOpening(n))) dlg.saved({ title: 'Saldo inicial guardado', amount: fmt(n), lines: [`Antes: ${fmt(before)} (${sg(diff)})`], effect: `Tu disponible ahora pasa de ${fmt(avail)} a ${fmt(avail + diff)}` });
   }
   async function exportBackup() {
     const data = await A.exportBackup();
     if (Platform.OS === 'web') {
-      try { await (navigator as any).clipboard?.writeText(data); dlg.toast('Respaldo copiado al portapapeles'); } catch { dlg.toast('No se pudo copiar'); }
+      const name = `equa-respaldo-${isoLocal(new Date())}.json`, nav = navigator as any;
+      // Celular (web): el menú de compartir guarda el archivo en Archivos/Drive sin abrirlo en una pantalla del navegador.
+      const phone = /iPhone|iPad|iPod|Android/i.test(nav.userAgent) || (/Macintosh/.test(nav.userAgent) && nav.maxTouchPoints > 1);
+      if (phone && nav.canShare && nav.share) {
+        const file = new File([data], name, { type: 'application/json' });
+        if (nav.canShare({ files: [file] })) {
+          try { await nav.share({ files: [file], title: 'Respaldo de Equa' }); setLastBk(await markBackup()); } catch { /* cerró el menú sin guardar: no cuenta como respaldo */ }
+          return;
+        }
+      }
+      try { await nav.clipboard?.writeText(data); dlg.toast('Respaldo copiado al portapapeles'); } catch { dlg.toast('No se pudo copiar'); }
       const blob = new Blob([data], { type: 'application/json' }), a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = `equa-respaldo-${isoLocal(new Date())}.json`; a.click();
-    } else await Share.share({ message: data, title: 'Respaldo de Equa' });
+      // target _blank: si el navegador no descarga y abre el archivo, lo abre en otra pestaña y no en la de la app.
+      a.href = URL.createObjectURL(blob); a.download = name; a.target = '_blank'; a.rel = 'noopener'; a.click();
+    } else {
+      const r = await Share.share({ message: data, title: 'Respaldo de Equa' });
+      if (r?.action === 'dismissedAction') return;   // cerró el menú sin guardar: no cuenta como respaldo
+    }
+    setLastBk(await markBackup());
   }
   /** Web: elegir el archivo .json y volcarlo al cuadro de texto (en el celular se pega el contenido). */
   function pickFile() {
@@ -117,29 +144,50 @@ export default function Datos() {
     );
   });
 
-  const account = (
+  const opening$ = (
     <Card style={L.wide ? { marginTop: 0 } : undefined}>
-      <H2>Tu cuenta y tus datos</H2>
-      {auth.mode === 'cloud' && <T tone="mute" size={14} style={{ marginBottom: 6 }}>Sesión: {auth.session?.user.email}. Tus datos se guardan en la nube y se sincronizan entre tus dispositivos.</T>}
-      {auth.mode === 'demo' && <T tone="mute" size={14} style={{ marginBottom: 6 }}>Modo demo: tus datos viven solo en este dispositivo. Configurá Supabase para tener cuenta y sincronización.</T>}
-      <T tone="mute" size={13}>Saldo inicial: dinero que tenías antes de tu primer movimiento.</T>
-      <Button kind="option" label={`Saldo inicial: ${fmt(snap.open || 0)}`} onPress={opening} />
-      <Button label="Guardar respaldo" onPress={exportBackup} />
-      <Button kind="option" label="Restaurar respaldo" onPress={() => setRestoring(r => !r)} />
+      <H2>Saldo inicial</H2>
+      <Row>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T size={22} weight="bold">{fmt(snap.open || 0)}</T>
+          <T tone="mute" size={13}>Dinero que tenías antes de tu primer movimiento</T>
+        </View>
+        <Button kind="option" center label="Cambiar" onPress={opening} style={{ marginTop: 0 }} />
+      </Row>
+    </Card>
+  );
+  const backup = (
+    <Card style={L.wide ? { marginTop: 0 } : undefined}>
+      <H2>Respaldo</H2>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Button label="Guardar respaldo" onPress={exportBackup} style={{ flex: 1, marginTop: 0 }} />
+        <Button kind="option" center label="Restaurar" onPress={() => setRestoring(r => !r)} style={{ flex: 1, marginTop: 0 }} />
+      </View>
+      {lastBk === undefined ? null : <View accessibilityLabel="Último respaldo manual" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 12, borderRadius: radius.sm, padding: 10, backgroundColor: lastBk ? t.bg : t.acc + '2b' }}>
+        <View style={{ width: 10, height: 10, borderRadius: 5, marginTop: 5, backgroundColor: lastBk ? t.inc : t.acc }} />
+        <T size={13.5} tone="mute" style={{ flex: 1 }}>{lastBk ? <>Último respaldo manual: <T size={13.5} weight="bold">{backupWhen(lastBk, isoLocal(new Date()))}</T></> : 'Todavía no hiciste ningún respaldo manual.'}</T>
+      </View>}
       {restoring && (
-        <View style={{ marginTop: 8 }}>
+        <View style={{ marginTop: 12 }}>
           <T tone="mute" size={13} style={{ marginBottom: 6 }}>Pega el contenido de un respaldo de Equa o de la app anterior{Platform.OS === 'web' ? ', o elige el archivo' : ''}. Antes de cambiar nada te muestro qué se va a restaurar.</T>
           {Platform.OS === 'web' && <Button kind="option" center label="Elegir archivo…" onPress={pickFile} style={{ marginTop: 0, marginBottom: 8 }} />}
           <Field value={json} onChangeText={setJson} placeholder='{"app":"equa",…}' multiline numberOfLines={5} style={{ minHeight: 110, textAlignVertical: 'top' }} />
           <Button label="Revisar respaldo" onPress={review} disabled={!json.trim()} />
         </View>
       )}
+    </Card>
+  );
+  const account = (
+    <Card style={L.wide ? { marginTop: 0 } : undefined}>
+      <H2>Tu cuenta</H2>
+      {auth.mode === 'cloud' && <T tone="mute" size={14}>Sesión: {auth.session?.user.email}. Tus datos se guardan en la nube y se sincronizan entre tus dispositivos.</T>}
+      {auth.mode === 'demo' && <T tone="mute" size={14}>Modo demo: tus datos viven solo en este dispositivo. Configurá Supabase para tener cuenta y sincronización.</T>}
       {auth.mode === 'cloud' && <Button kind="link" label="Cerrar sesión" onPress={() => auth.signOut()} />}
     </Card>
   );
 
   const menu = (
-    <Card style={L.wide ? { marginTop: 0, marginBottom: 14 } : undefined}>
+    <Card style={L.wide ? { marginTop: 0 } : undefined}>
       <Item first title="Reportes" sub="Exportá tus números en PDF o Excel" onPress={() => setView('reports')} right={<T size={20} tone="mute">›</T>} />
       <Item title="Editor de categorías" sub="Gastos, ingresos y ahorro" onPress={() => setView('cats')} right={<T size={20} tone="mute">›</T>} />
     </Card>
@@ -157,8 +205,8 @@ export default function Datos() {
     );
   }
   return (
-    <Screen>
-      {L.wide ? <View style={{ flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}><View style={{ flex: 1 }}>{menu}</View><View style={{ flex: 1 }}>{account}</View></View> : <>{menu}{account}</>}
+    <Screen title="Datos">
+      {L.wide ? <View style={{ flexDirection: 'row', gap: 24, alignItems: 'flex-start' }}><View style={{ flex: 1, gap: 24 }}>{menu}{opening$}</View><View style={{ flex: 1, gap: 24 }}>{backup}{account}</View></View> : <>{menu}{opening$}{backup}{account}</>}
     </Screen>
   );
 }
