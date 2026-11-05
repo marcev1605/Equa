@@ -22,6 +22,12 @@ input::placeholder,textarea::placeholder{color:var(--ph,#888)}`;
         <meta name="theme-color" content={light.bg} media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content={dark.bg} media="(prefers-color-scheme: dark)" />
         <meta name="color-scheme" content="light dark" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" href="/icon-192.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Equa" />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: css }} />
       </head>

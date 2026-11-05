@@ -8,7 +8,7 @@
     "web": "expo start --web",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "build:web": "expo export --platform web",
+    "build:web": "expo export --platform web && node scripts/postbuild-web.cjs",
     "typecheck": "tsc --noEmit",
     "test": "node tools/run-all.cjs",
     "test:domain": "node tools/test-actions.cjs",
