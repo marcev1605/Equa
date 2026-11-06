@@ -7,6 +7,7 @@ const seed = require('./web-harness/seed.cjs');
 const {chromium} = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 const PAGE = 'file://' + path.join(root, 'tools/web-harness/dist/index.html');
 let fails=0;const ok=(c,m)=>{console.log(c?'  ✓':'  ✗ FALLA',m);if(!c)fails++};
+const keepLS=async q=>{const k=await q.evaluate(()=>JSON.stringify(Object.fromEntries(Object.entries(localStorage))));await q.addInitScript(k=>{const o=JSON.parse(k);for(const [a,b] of Object.entries(o))if(localStorage.getItem(a)===null)localStorage.setItem(a,b)},k)};   // el navegador de pruebas a veces pierde el almacenamiento de un archivo local al recargar: se verifica lo guardado y se repone antes de recargar
 (async()=>{
 const b=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined});
 // La ventana "Guardado" (con botón OK) tapa la pantalla hasta que se cierra. Playwright la cierra sola antes de la siguiente acción;
@@ -134,7 +135,11 @@ for(const w of [320,390,1280]){
   }
  ok(tx.includes('Ritmo del mes')&&tx.includes('Gastás por día')&&/Este mes vas a cerrar en \$26\.667/.test(tx),'estadísticas @'+w+': ritmo del mes con el gasto por día y el cierre previsto');
  ok(tx.includes('Fijos vs. variables')&&tx.includes('Fijos · 34%')&&tx.includes('Tarjeta · 63%')&&tx.includes('Del mes · 4%')&&tx.includes('El 34% de tus gastos se repite todos los meses'),'estadísticas @'+w+': fijos vs. variables (34% / 63% / 4%)');
- {const tj=await q.locator('[aria-label="Tarjeta Visa ICBC"]').innerText();ok(tx.includes('Por tarjeta')&&tj.includes('$16.667')&&tj.includes('Cuotas pendientes: $33.333 en 2 meses')&&tx.includes('Tenés $33.333 comprometidos en cuotas'),'estadísticas @'+w+': por tarjeta con lo del mes y las cuotas pendientes');}
+ {const tj=await q.locator('[aria-label="Tarjeta Visa ICBC"]').innerText();ok(tx.includes('Por tarjeta')&&tj.includes('$16.667')&&tj.includes('$33.333')&&tj.includes('Pagaste')&&tj.includes('Termina en')&&tx.includes('Debés en cuotas')&&tx.includes('Última cuota en')&&tj.includes('Mostrar detalle')&&!tj.includes('Faltan 2 cuotas de 3'),'estadísticas @'+w+': por tarjeta con total, avance, fin y el detalle oculto');
+  await q.locator('[aria-label="Mostrar detalle de Visa ICBC"]').click();await q.waitForTimeout(200);const td=await q.locator('[aria-label="Tarjeta Visa ICBC"]').innerText();
+  ok(td.includes('Ocultar detalle')&&td.includes('Faltan 2 cuotas de 3')&&(await q.locator('[aria-label="Detalle de Visa ICBC"]').count())===1,'estadísticas @'+w+': "Mostrar detalle" abre las compras de esa tarjeta');
+  await q.locator('[aria-label="Ocultar detalle de Visa ICBC"]').click();await q.waitForTimeout(200);
+  ok((await q.locator('[aria-label="Detalle de Visa ICBC"]').count())===0,'estadísticas @'+w+': "Ocultar detalle" lo cierra');}
  ok(tx.includes('Casa · 63% Nueva')&&tx.includes('Mascotas · 34% Nueva')&&/Ocio · 4% \$1\.000/.test(tx),'estadísticas @'+w+': categorías sin gasto el mes anterior dicen "Nueva" y las que no cambiaron no muestran nada');
  ok(await q.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'estadísticas @'+w+': sin desplazamiento horizontal');
  await q.locator('[aria-label="Mes siguiente"]').click();await q.waitForTimeout(300);
@@ -154,20 +159,49 @@ for(const [w,muchas] of [[320,false],[390,false],[1280,false],[320,true],[390,tr
  if(!muchas){
   const tx=await T();
   ok(tx.includes('Tarjeta vs. ingresos')&&tx.includes('6%')&&tx.includes('$16.667 de $300.000 de ingresos de noviembre'),tg+'franja "Tarjeta vs. ingresos" con porcentaje e importes del mes en que se paga');
-  ok(tx.includes('Lo que ya debés, mes a mes')&&tx.includes('solo cuotas')&&(await q.locator('[aria-label="Deuda Nov: $16.667"]').count())===1&&(await q.locator('[aria-label="Deuda Dic: $16.667"]').count())===1,tg+'gráfico de deuda por mes (Nov y Dic con $16.667)');
+  ok(tx.includes('Lo que ya debés, mes a mes')&&(await q.locator('[aria-label="Deuda Nov: $16.667"]').count())===1&&(await q.locator('[aria-label="Deuda Dic: $16.667"]').count())===1,tg+'gráfico de deuda por mes (Nov y Dic con $16.667)');
   ok(tx.includes('Tenés $33.333 comprometidos en cuotas')&&tx.includes('Desde Enero se libera todo'),tg+'resumen del total comprometido y cuándo se libera');
-  ok((await q.locator('[aria-label="Detalle de Noviembre"]').count())===0,tg+'con pocas tarjetas la deuda va en una tabla (sin desplegables)');
+  ok((await q.locator('[aria-label="Filtrar por tarjeta"]').count())===1&&(await q.locator('[aria-label="Filtrar por tipo"]').count())===1&&tx.includes('Todas las tarjetas')&&tx.includes('Solo cuotas')===false,tg+'dos desplegables (Tarjeta y Tipo) en lugar de botones cápsula');
+  ok(tx.includes('Resumen de Noviembre')&&(await q.locator('[aria-label^="Consumos de "]').count())>=1&&/cuota 2\/3/.test(tx),tg+'abajo se ve el resumen del primer mes con cada consumo y su cuota');
+  await q.locator('[aria-label="Deuda Dic: $16.667"]').click();await q.waitForTimeout(250);
+  {const t2=await T();ok(t2.includes('Resumen de Diciembre')&&/cuota 3\/3/.test(t2),tg+'al tocar una barra se ve el detalle de ese mes');}
+  await q.locator('[aria-label="Filtrar por tipo"]').click();await q.waitForTimeout(200);
+  {const op=await q.locator('[aria-label="Tipo: Solo cuotas"]').count();ok(op===1&&(await q.locator('[aria-label="Tipo: Un pago"]').count())===1&&(await q.locator('[aria-label="Filtrar por tipo"]').getAttribute('aria-expanded'))==='true',tg+'Tipo abre una lista con Todo, Solo cuotas y Un pago');
+   ok(await q.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),tg+'con la lista abierta, sin desplazamiento horizontal');
+   const inV=await q.evaluate(()=>{const e=document.querySelector('[aria-label="Opciones de tipo"]');const r=e.getBoundingClientRect();return r.left>=0&&r.right<=window.innerWidth+0.5});ok(inV,tg+'la lista de Tipo entra completa en la pantalla');
+   await q.locator('[aria-label="Tipo: Un pago"]').click();await q.waitForTimeout(250);const t3=await T();ok(t3.includes('No hay consumos con este filtro')&&(await q.locator('[aria-label="Opciones de tipo"]').count())===0,tg+'Un pago sin compras en un pago avisa y cierra la lista');
+   await q.locator('[aria-label="Filtrar por tipo"]').click();await q.waitForTimeout(150);await q.locator('[aria-label="Tipo: Todo"]').click();await q.waitForTimeout(250);ok((await T()).includes('Resumen de Diciembre'),tg+'volver a Todo mantiene el mes elegido y recupera el detalle');}
+  await q.locator('[aria-label="Filtrar por tarjeta"]').click();await q.waitForTimeout(200);
+  ok((await q.locator('[aria-label="Tarjeta: Visa ICBC"]').count())===1&&(await q.locator('[aria-label="Tarjeta: Todas las tarjetas"]').count())===1,tg+'Tarjeta lista todas las tarjetas');
+  await q.locator('[aria-label="Tarjeta: Visa ICBC"]').click();await q.waitForTimeout(250);
+  ok((await q.locator('[aria-label="Filtrar por tarjeta"]').innerText()).includes('Visa ICBC')&&(await q.locator('[aria-label="Deuda Nov: $16.667"]').count())===1,tg+'elegir una tarjeta la deja marcada en el campo');
   if(w===390){await q.locator('[aria-label="Mes siguiente"]').click();await q.waitForTimeout(300);const t2=await T();ok(t2.includes('ingresos de diciembre')&&t2.includes('Tenés $16.667 comprometidos en cuotas'),tg+'al avanzar de mes, la franja y la deuda se recalculan');}
  } else {
   const tx=await T();
-  ok(tx.includes('Otras (6)')&&(await q.locator('[aria-label="Detalle de Noviembre"]').count())===1,tg+'muestra las 4 tarjetas mayores y "Otras (6)", con meses desplegables');
-  await q.locator('[aria-label="Detalle de Noviembre"]').click();await q.waitForTimeout(250);
-  ok((await q.locator('[aria-label="Detalle de Noviembre"]').getAttribute('aria-expanded'))==='true',tg+'el desplegable queda abierto');const t2=await T();ok(t2.includes('Noviembre 10 tarjetas')&&['Cabal','Brubank','Visa ICBC','Master Galicia'].every(n=>t2.includes(n)),tg+'al tocar Noviembre se ven las 10 tarjetas que lo componen');
-  ok(await q.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),tg+'abierto, sin desplazamiento horizontal');
-  await q.locator('[aria-label="Detalle de Noviembre"]').click();await q.waitForTimeout(200);
-  ok((await q.locator('[aria-label="Detalle de Noviembre"]').getAttribute('aria-expanded'))==='false',tg+'se vuelve a plegar');
+  ok(tx.includes('Resumen de Noviembre')&&['Cabal','Brubank','Visa ICBC','Master Galicia','Santander'].every(n=>tx.includes(n)),tg+'el resumen del mes muestra las 10 tarjetas con sus consumos');
+  await q.locator('[aria-label="Filtrar por tarjeta"]').click();await q.waitForTimeout(250);
+  ok((await q.locator('[aria-label^="Tarjeta: "]').count())===11,tg+'el desplegable ofrece "Todas" y las 10 tarjetas');
+  ok(await q.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),tg+'con la lista abierta, sin desplazamiento horizontal');
+  {const inV=await q.evaluate(()=>{const e=document.querySelector('[aria-label="Opciones de tarjeta"]');const r=e.getBoundingClientRect();return r.left>=0&&r.right<=window.innerWidth+0.5});ok(inV,tg+'la lista entra completa a lo ancho de la pantalla');}
+  await q.locator('[aria-label="Tarjeta: Cabal"]').click();await q.waitForTimeout(250);
+  {const g=q.locator('[aria-label^="Consumos de "]');ok((await g.count())===1&&(await g.first().innerText()).includes('Cabal')&&(await T()).includes('Resumen de Noviembre'),tg+'elegir una tarjeta deja solo sus consumos');}
  }
  await ct.close();}
+// 2g) tarjetas: "Lo que ya debés" suma las compras en un pago y se filtra por tipo
+for(const [w,h] of [[390,900],[1280,900]]){
+ const d=JSON.parse(seed);d.tx.push({id:'u1',type:'out',amt:25000,cat:'Comida',note:'Supermercado Coto',date:'2026-10-28',card:true,cardName:'Visa ICBC',fixed:false,inst:1,skip:[]});
+ const cu=await b.newContext({viewport:{width:w,height:h}});const q=await cu.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+ await q.addInitScript(sd=>{localStorage.setItem('equa-local-v1',sd)},JSON.stringify(d));await q.goto(PAGE+'#/cards');await q.waitForTimeout(500);
+ const T=async()=>(await q.innerText('body')).replace(/\s+/g,' ');const tg='deuda con un pago @'+w+': ';
+ let tx=await T();
+ ok(tx.includes('comprometidos en cuotas y compras ya cargadas')&&(await q.locator('[aria-label="Deuda Nov: $41.667"]').count())===1,tg+'la barra de noviembre suma la cuota y la compra en un pago ($41.667)');
+ ok(tx.includes('Supermercado Coto')&&tx.includes('Comida · compra 28/10')&&/cuota 2\/3/.test(tx),tg+'el detalle del mes muestra la compra en un pago junto a la cuota');
+ await q.locator('[aria-label="Filtrar por tipo"]').click();await q.waitForTimeout(150);await q.locator('[aria-label="Tipo: Un pago"]').click();await q.waitForTimeout(250);tx=await T();
+ ok(tx.includes('Supermercado Coto')&&!tx.includes('cuota 2/3')&&(await q.locator('[aria-label="Deuda Nov: $25.000"]').count())===1&&tx.includes('comprometidos en compras ya cargadas'),tg+'"Un pago" deja solo la compra en un pago');
+ await q.locator('[aria-label="Filtrar por tipo"]').click();await q.waitForTimeout(150);await q.locator('[aria-label="Tipo: Solo cuotas"]').click();await q.waitForTimeout(250);tx=await T();
+ ok(!tx.includes('Supermercado Coto')&&/cuota 2\/3/.test(tx)&&(await q.locator('[aria-label="Deuda Nov: $16.667"]').count())===1&&tx.includes('comprometidos en cuotas.'),tg+'"Solo cuotas" deja solo las cuotas');
+ ok(await q.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),tg+'sin desplazamiento horizontal');
+ await cu.close();}
 // ventana "Guardado": al guardar un movimiento aparece al centro con el detalle y un botón OK (celulares chicos, grandes y escritorio)
 for(const [w,h] of [[320,568],[390,844],[1280,800]]){
  const cg=await b.rawContext({viewport:{width:w,height:h}});const q=await cg.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
@@ -267,8 +301,9 @@ for(const [w,h,wide] of [[320,568,false],[390,700,false],[1280,420,true]]){const
   const down=y=>q.evaluate(y=>{const el=[...document.querySelectorAll('*')].find(e=>e.scrollHeight>e.clientHeight+50&&/(auto|scroll)/.test(getComputedStyle(e).overflowY)&&e.clientWidth>200);el.scrollTop=y},y);
   const eq=()=>q.evaluate(()=>{const i=document.querySelector('img[alt="Equa"]');if(!i)return null;const r=i.getBoundingClientRect();return {top:Math.round(r.top),h:Math.round(r.height)}});
   const cintas=()=>q.getByRole('button',{name:'Volver a hoy'}).count();
+  if(!wide){const e0=await eq();ok(e0&&e0.h===40&&e0.top>=10,`encabezado @${w}: arriba el logo es grande (40px) y deja aire sobre la hora`)}
   await down(300);await q.waitForTimeout(250);
-  if(!wide){const e=await eq();ok(e&&e.h===22&&e.top<14,`encabezado @${w}: logo compacto (22px) queda fijo arriba al deslizar`)}
+  if(!wide){const e=await eq();ok(e&&e.h===26&&e.top>=4&&e.top<16,`encabezado @${w}: al bajar el logo se achica a 26px y queda fijo arriba`)}
   ok((await cintas())===0,`cinta @${w}: no aparece en el mes de hoy`);
   await down(0);await q.waitForTimeout(150);await q.getByRole('button',{name:'Mes siguiente'}).click();await q.waitForTimeout(250);
   ok((await cintas())===1,`cinta @${w}: arriba de todo solo está el botón del selector`);
@@ -322,6 +357,7 @@ for(const [w,h] of [[390,844],[1280,800]]){const cd=await b.rawContext({viewport
   ok((await body()).includes('Todavía no hiciste ningún respaldo manual'),`datos @${w}: sin respaldos avisa que todavía no hay ninguno`);
   const dl=q.waitForEvent('download');await q.getByText('Guardar respaldo',{exact:true}).click();await dl;await q.waitForTimeout(300);
   ok((await body()).includes('Último respaldo manual: hoy, 2 de octubre, a las 12:00'),`datos @${w}: muestra el último respaldo manual con día y hora`);
+  await q.waitForFunction(()=>Object.keys(localStorage).some(k=>/backup/.test(k)));await keepLS(q);
   await q.reload();await q.waitForFunction(()=>document.body.innerText.includes('Último respaldo manual'),null,{timeout:5000}).catch(()=>{});
   ok((await body()).includes('Último respaldo manual: hoy, 2 de octubre, a las 12:00'),`datos @${w}: el último respaldo se recuerda al volver a abrir`);
   const before=await open();
@@ -370,6 +406,61 @@ for(const cancel of [false,true]){const cm=await b.rawContext({viewport:{width:3
   else ok(sh.length===0&&body.includes('Todavía no hiciste ningún respaldo manual'),'respaldo en iPhone: si cierra el menú de compartir sin guardar, no cuenta como respaldo');
   ok(q.url()===u0&&cm.pages().length===1&&!(await q.evaluate(()=>/"app":"equa"/.test(document.body.innerText))),'respaldo en iPhone: no navega ni abre el archivo en la pantalla de la app');
   await cm.close();}
+// ojito para ocultar saldos + búsqueda en Movimientos (Resumen)
+for(const [w,h] of [[390,844],[1280,800]]){const cq=await b.rawContext({viewport:{width:w,height:h}});const q=await cq.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
+  await q.addInitScript(sd=>{if(!localStorage.getItem('equa-local-v1'))localStorage.setItem('equa-local-v1',sd)},seed);await q.goto(PAGE+'#/');await q.waitForTimeout(500);
+  const body=()=>q.innerText('body');const MK='$ ••••••';
+  let t=await body();
+  ok(!t.includes(MK)&&(await q.locator('[aria-label="Ocultar saldos"]').count())===1,`ojito @${w}: arranca con saldos visibles y ofrece "Ocultar saldos"`);
+  const ing=(t.match(/Ingresos[\s›]*\n?\s*(\$[\d.]+)/)||[])[1];
+  await q.locator('[aria-label="Ocultar saldos"]').click();await q.waitForTimeout(250);
+  t=await body();
+  ok((t.match(/\$ ••••••/g)||[]).length>=4&&(!ing||!t.includes('Ingresos '+ing)),`ojito @${w}: Disponible, Previsto, Ingresos, Gastos y pendientes quedan ocultos`);
+  ok(t.includes('Alimento')&&/\$9\.000/.test(t),`ojito @${w}: los movimientos siguen visibles (opción 1)`);
+  ok((await q.locator('[aria-label="Mostrar saldos"]').count())===1,`ojito @${w}: el botón pasa a "Mostrar saldos"`);
+  ok(await q.evaluate(()=>localStorage.getItem('equa-hide-v1')==='1'),`ojito @${w}: se guarda en el dispositivo`);
+  await q.waitForFunction(()=>localStorage.getItem('equa-hide-v1')==='1');await keepLS(q);
+  await q.reload();await q.waitForFunction(()=>document.body.innerText.includes('Disponible ahora'));await q.waitForTimeout(500);t=await body();
+  ok((t.match(/\$ ••••••/g)||[]).length>=4,`ojito @${w}: al volver a abrir sigue oculto`);
+  await q.locator('[aria-label="Mostrar saldos"]').click();await q.waitForTimeout(250);t=await body();
+  ok(!t.includes(MK)&&t.includes('Disponible ahora'),`ojito @${w}: "Mostrar saldos" los vuelve a mostrar`);
+  // búsqueda
+  const lupa=q.locator('[aria-label="Buscar movimientos"]').first();
+  ok(await lupa.count()===1,`búsqueda @${w}: hay una lupa junto a Movimientos`);
+  await lupa.click();await q.waitForTimeout(200);t=await body();
+  ok(t.includes('Categoría ▾')&&t.includes('Día ▾')&&t.includes('Tipo ▾'),`búsqueda @${w}: se abre con Categoría, Día y Tipo`);
+  const box=q.getByPlaceholder('Nombre o categoría');
+  await box.fill('cine');await q.waitForTimeout(200);t=await body();
+  ok(/resultado/.test(t)&&t.includes('Cine 2')&&!t.includes('Alimento'),`búsqueda @${w}: por nombre ("cine") deja solo el cine`);
+  ok(/2 resultados/.test(t)&&/Total −\$2\.000/.test(t)&&t.includes('Cine 1'),`búsqueda @${w}: muestra cuántos resultados y cuánto suman (incluye el Cine 1 atrasado de septiembre)`);
+  await box.fill('MASCOTÁS'.slice(0,7));await q.waitForTimeout(150);t=await body();
+  ok(t.includes('Alimento')&&!t.includes('Cine 2'),`búsqueda @${w}: por categoría, sin importar mayúsculas`);
+  await box.fill('zzz');await q.waitForTimeout(150);t=await body();
+  ok(t.includes('No hay movimientos con ese filtro'),`búsqueda @${w}: sin coincidencias avisa y ofrece limpiar`);
+  await q.getByText('Limpiar búsqueda',{exact:true}).click();await q.waitForTimeout(200);t=await body();
+  ok(t.includes('Alimento')&&t.includes('Cine 2')&&!/resultado/.test(t),`búsqueda @${w}: "Limpiar búsqueda" vuelve a la lista completa`);
+  await q.locator('[aria-label="Filtrar por tipo"]').click();await q.waitForTimeout(150);
+  await q.locator('[aria-label="Elegir Ingresos"]').click();await q.waitForTimeout(200);t=await body();
+  ok(t.includes('Tipo: Ingresos')&&t.includes('Sueldo')&&!t.includes('Alimento')&&!t.includes('Cine 2'),`búsqueda @${w}: Tipo → Ingresos deja solo ingresos`);
+  await q.locator('[aria-label="Filtrar por categoría"]').click();await q.waitForTimeout(150);
+  ok((await q.locator('[aria-label="Elegir Sueldo"]').count())===1&&(await q.locator('[aria-label="Elegir Mascotas"]').count())===1,`búsqueda @${w}: Categoría ofrece las categorías del mes`);
+  await q.locator('[aria-label="Quitar filtro"]').count();
+  await q.locator('[aria-label="Elegir Mascotas"]').click();await q.waitForTimeout(200);t=await body();
+  ok(/No hay movimientos/.test(t),`búsqueda @${w}: Ingresos + Mascotas no tiene resultados`);
+  await q.locator('[aria-label="Filtrar por tipo"]').click();await q.waitForTimeout(100);
+  await q.locator('[aria-label="Quitar filtro"]').click();await q.waitForTimeout(200);t=await body();
+  ok(t.includes('Alimento')&&t.includes('Categoría: Mascotas'),`búsqueda @${w}: "Quitar" saca un solo filtro`);
+  await q.locator('[aria-label="Filtrar por día"]').click();await q.waitForTimeout(150);
+  ok(/Hoy|\d{2}\/\d{2}/.test(await body()),`búsqueda @${w}: Día ofrece Hoy y los días con movimientos`);
+  await q.locator('[aria-label="Cerrar búsqueda"]').click();await q.waitForTimeout(200);t=await body();
+  ok(t.includes('Alimento')&&t.includes('Cine 2')&&!t.includes('Nombre o categoría')&&!/resultado/.test(t),`búsqueda @${w}: al cerrar se limpia todo`);
+  await lupa.click();await q.waitForTimeout(150);await q.getByPlaceholder('Nombre o categoría').fill('cine');await q.waitForTimeout(150);
+  await q.locator('[aria-label="Mes siguiente"]').first().click();await q.waitForTimeout(300);t=await body();
+  ok(!t.includes('Nombre o categoría'),`búsqueda @${w}: al cambiar de mes se limpia`);
+  const ov=await q.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);
+  ok(!ov,`búsqueda/ojito @${w}: sin desplazamiento horizontal`);
+  await cq.close();}
+
 // pago/cobro masivo desde "Por pagar" / "Por cobrar"
 for(const [w,h] of [[390,844],[1280,800]]){const cp=await b.rawContext({viewport:{width:w,height:h}});const q=await cp.newPage();await q.clock.install({time:new Date('2026-10-02T12:00:00')});
   await q.addInitScript(sd=>{if(!localStorage.getItem('equa-local-v1'))localStorage.setItem('equa-local-v1',sd)},seed);await q.goto(PAGE+'#/');await q.waitForTimeout(450);

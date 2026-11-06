@@ -11,6 +11,7 @@ import { CardLookSheet } from './CardLookSheet';
 import { SavForm, type SavDir } from './SavForm';
 import { TxForm, type TxKind } from './TxForm';
 import { Icon, TabIcon, type IconName } from './icons';
+import { PrivacyProvider, usePrivacy } from './privacy';
 
 export const NAV: { path: string; label: string; icon: IconName }[] = [
   { path: '/', label: 'Resumen', icon: 'home' },
@@ -56,10 +57,21 @@ export const useUI = () => useContext(UICtx);
 
 export function Logo({ size = 44, compact = false }: { size?: number; compact?: boolean }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: compact ? 7 : 10 }}>
-      <Image source={require('../../assets/icon.png')} style={{ width: size, height: size, borderRadius: size * 0.22 }} accessibilityLabel="Equa" />
-      <T size={compact ? 17 : size * 0.8} weight="bold" style={{ letterSpacing: -1 }}>Equa</T>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: compact ? size * 0.28 : 10 }}>
+      <Image source={require('../../assets/logo.png')} style={{ width: size, height: size, borderRadius: size * 0.22 }} accessibilityLabel="Equa" />
+      <T size={compact ? size * 0.74 : size * 0.8} weight="bold" style={{ letterSpacing: -1 }}>Equa</T>
     </View>
+  );
+}
+
+/** Ojito de Resumen: oculta o muestra todos los saldos. */
+function EyeButton() {
+  const t = useTheme(), { hide, toggle } = usePrivacy();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={hide ? 'Mostrar saldos' : 'Ocultar saldos'} accessibilityState={{ selected: hide }} onPress={toggle} hitSlop={6}
+      style={({ pressed }: { pressed: boolean }) => ({ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: hide ? t.card : 'transparent', borderWidth: hide ? 1 : 0, borderColor: t.line, opacity: pressed ? 0.6 : 1 })}>
+      <Icon name={hide ? 'eyeoff' : 'eye'} color={hide ? t.acc : t.mute} size={21} />
+    </Pressable>
   );
 }
 
@@ -88,27 +100,28 @@ export function Stat({ label, value, tone = 'ink', sub, c, hero, flex = 1, onPre
 
 /**
  * Contenedor de pantalla: scroll + ancho máximo centrado según el dispositivo.
- * Celular: logo compacto fijo arriba (línea y sombra suave al deslizar); si se está en otro mes y el selector ya salió
+ * Celular: logo grande arriba que al bajar se achica hasta un tamaño fijo (con aire arriba para salir de la franja que iOS difumina) (línea y sombra suave al deslizar); si se está en otro mes y el selector ya salió
  * de la pantalla, debajo del logo aparece la cinta "Volver a hoy".
  * Web ancha (con `title`): encabezado fijo con el título, el selector de mes y los totales (`summary`), que se achican al bajar.
  */
-export function Screen({ children, title, month, summary }: { children: React.ReactNode; title?: string; month?: React.ReactNode; summary?: (compact: boolean) => React.ReactNode }) {
+export function Screen({ children, title, month, summary, eye }: { children: React.ReactNode; title?: string; month?: React.ReactNode; summary?: (compact: boolean) => React.ReactNode; eye?: boolean }) {
   const L = useLayout(), t = useTheme();
   const ref = useRef<{ scrollTo: (o: { y: number; animated: boolean }) => void } | null>(null);
   const [y, setY] = useState(0), [compact, setCompact] = useState(false);
   const [home, setHome] = useState<HomeLink | null>(null);
   const head = L.wide && !!title;
+  const p = Math.max(0, Math.min(1, y / 90)), logoSize = 40 - 14 * p;   // logo grande arriba; al bajar pasa al tamaño fijo (26)
   const line = y > 4, ribbon = !L.wide && !!home && y > 80, c = head && compact;
   const lift = line ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 } : {};
   return (
     <HomeCtx.Provider value={setHome}>
       <View style={{ flex: 1 }}>
         <View style={{ width: '100%', zIndex: 5, backgroundColor: t.bg, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: line && (head || !L.wide) ? t.line : 'transparent', ...(head || !L.wide ? lift : {}) }}>
-          {!L.wide ? <View style={{ height: 40, alignItems: 'center', justifyContent: 'center' }}><Logo size={22} compact /></View> : null}
+          {!L.wide ? <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center', paddingTop: 12 - 6 * p, paddingBottom: 14 - 3 * p }}><Logo size={logoSize} compact />{eye ? <View style={{ position: 'absolute', right: 10, top: '50%', marginTop: -16 }}><EyeButton /></View> : null}</View> : null}
           {head ? (
             <View style={{ width: '100%', maxWidth: L.content, paddingHorizontal: 16, paddingTop: c ? 14 : 24, paddingBottom: c ? 12 : 18 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: summary ? (c ? 10 : 18) : 0 }}>
-                <T size={c ? 21 : 26} weight="bold" style={{ letterSpacing: -0.6 }}>{title}</T>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><T size={c ? 21 : 26} weight="bold" style={{ letterSpacing: -0.6 }}>{title}</T>{eye ? <EyeButton /> : null}</View>
                 {month}
               </View>
               {summary ? <View style={{ flexDirection: 'row', gap: c ? 12 : 20 }}>{summary(c)}</View> : null}
@@ -149,7 +162,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <UICtx.Provider value={ui}>
+    <PrivacyProvider><UICtx.Provider value={ui}>
       <View style={{ flex: 1, backgroundColor: t.bg, paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }}>
         {L.wide ? (
           <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -201,7 +214,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <CardLookSheet card={look} onClose={() => setLook(null)} />
       <SavForm visible={sf.open} dir={sf.dir} editing={sf.editing} onClose={() => setSf(f => ({ ...f, open: false }))} />
       <TxForm visible={form.open} editing={form.editing} kind={form.kind} onClose={() => setForm(f => ({ ...f, open: false }))} />
-    </UICtx.Provider>
+    </UICtx.Provider></PrivacyProvider>
   );
 }
 

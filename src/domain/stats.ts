@@ -67,39 +67,70 @@ export function expenseKinds(eng: Engine, i: number): Kinds {
   return k;
 }
 
-export interface CardStat { name: string; spent: number; pending: number; pendingMonths: number }
-/** Por tarjeta: lo que se paga en el mes elegido y lo que queda en cuotas después de ese mes. */
-export function cardStats(eng: Engine, i: number): { cards: CardStat[]; pending: number } {
+/** Una compra en cuotas que todavía no terminó de pagarse. */
+export interface CardPlan { name: string; rem: number; n: number; left: number; end: number }
+export interface CardStat {
+  name: string; spent: number; pending: number; pendingMonths: number;
+  paid: number;                       // lo ya pagado de las compras en cuotas que siguen abiertas
+  end: number | null;                 // mes de la última cuota (null si no queda nada)
+  plans: CardPlan[];                  // compras en cuotas que quedan, de la que termina antes a la que termina después
+}
+/** Por tarjeta: lo que se paga en el mes elegido, lo que queda en cuotas después de ese mes y cuándo termina. */
+export function cardStats(eng: Engine, i: number): { cards: CardStat[]; pending: number; end: number | null } {
   const all = eng.all().filter(o => o.t.card && o.t.type === 'out');
   const cards = eng.cardNames().map(name => {
     const mine = all.filter(o => cardOf(o.t) === name), later = mine.filter(o => o.i > i && !o.t.fixed && o.n > 1);
-    return { name, spent: mine.filter(o => o.i === i).reduce((a, o) => a + o.a, 0), pending: later.reduce((a, o) => a + o.a, 0), pendingMonths: later.length ? Math.max(...later.map(o => o.i)) - i : 0 };
+    const ids = new Set(later.map(o => o.t.id));
+    const plans = [...ids].map(id => {
+      const l = later.filter(o => o.t.id === id), o = l[0];
+      return { name: o.t.note || o.t.cat, rem: l.length, n: o.n, left: l.reduce((a, x) => a + x.a, 0), end: Math.max(...l.map(x => x.i)) };
+    }).sort((x, y) => x.end - y.end || y.left - x.left);
+    const paid = mine.filter(o => o.i <= i && ids.has(o.t.id)).reduce((a, o) => a + o.a, 0);
+    return { name, spent: mine.filter(o => o.i === i).reduce((a, o) => a + o.a, 0), pending: later.reduce((a, o) => a + o.a, 0), pendingMonths: later.length ? Math.max(...later.map(o => o.i)) - i : 0, paid, end: later.length ? Math.max(...later.map(o => o.i)) : null, plans };
   }).filter(c => c.spent > 0.005 || c.pending > 0.005);
-  return { cards, pending: cards.reduce((a, c) => a + c.pending, 0) };
+  const ends = cards.map(c => c.end).filter((e): e is number => e != null);
+  return { cards, pending: cards.reduce((a, c) => a + c.pending, 0), end: ends.length ? Math.max(...ends) : null };
 }
 
+export interface DebtRow {
+  i: number; card: string; name: string; cat: string; a: number;
+  k: number; n: number;                                          // cuota k de n (1 de 1 si fue un solo pago)
+  date: string;                                                  // fecha de la compra
+  kind: 'cuota' | 'pago';                                        // en cuotas o en un pago
+}
+export interface DebtFilter { card?: string; tipo?: 'todo' | 'cuota' | 'pago' }
 export interface CardDebt {
   months: number[];                                              // meses (de pago) que se muestran
   cards: { name: string; v: number[]; t: number }[];             // por tarjeta, de mayor a menor deuda en esos meses
   totals: number[];                                              // total de cada mes
+  cuotas: number[];                                              // de cada mes, lo que son cuotas
+  pagos: number[];                                               // de cada mes, lo que son compras en un pago
+  rows: DebtRow[];                                               // cada consumo, por mes de pago y fecha de compra
   total: number;                                                 // suma de esos meses
-  all: number;                                                   // todas las cuotas pendientes desde `from`, incluso después de esos meses
-  last: number | null;                                           // último mes con cuotas
+  all: number;                                                   // todo lo pendiente desde `from`, incluso después de esos meses
+  last: number | null;                                           // último mes con deuda
   worst: { i: number; v: number } | null;                        // mes más pesado
 }
-/** Cuotas ya cargadas que quedan por pagar desde el mes `from`, mes por mes y por tarjeta. Los fijos con tarjeta no son deuda: no entran. */
-export function cardDebt(eng: Engine, from: number, span = 6): CardDebt {
-  const inst = eng.all().filter(o => o.t.card && o.t.type === 'out' && !o.t.fixed && o.n > 1 && o.i >= from);
+/**
+ * Lo que ya se cargó con tarjeta y queda por pagar desde el mes `from`, mes por mes y por tarjeta: cuotas y compras en un pago.
+ * Se puede filtrar por tarjeta y por tipo. Los fijos con tarjeta no son deuda: no entran.
+ */
+export function cardDebt(eng: Engine, from: number, span = 6, f: DebtFilter = {}): CardDebt {
+  const inst = eng.all().filter(o => o.t.card && o.t.type === 'out' && !o.t.fixed && o.i >= from
+    && (f.tipo === 'cuota' ? o.n > 1 : f.tipo === 'pago' ? o.n <= 1 : true) && (!f.card || cardOf(o.t) === f.card));
   const months = Array.from({ length: span }, (_, k) => from + k);
+  const rows: DebtRow[] = inst.map(o => ({ i: o.i, card: cardOf(o.t), name: o.t.note || o.t.cat, cat: o.t.cat, a: o.a, k: o.k, n: o.n, date: o.t.date, kind: o.n > 1 ? 'cuota' as const : 'pago' as const }))
+    .sort((x, y) => x.i - y.i || x.date.localeCompare(y.date));
   const cards = eng.cardNames().map(name => {
-    const mine = inst.filter(o => cardOf(o.t) === name), v = months.map(i => mine.filter(o => o.i === i).reduce((a, o) => a + o.a, 0));
+    const mine = rows.filter(r => r.card === name), v = months.map(i => mine.filter(r => r.i === i).reduce((a, r) => a + r.a, 0));
     return { name, v, t: v.reduce((a, b) => a + b, 0) };
   }).filter(c => c.t > 0.005).sort((a, b) => b.t - a.t);
+  const by = (kind: DebtRow['kind']) => months.map(i => rows.filter(r => r.kind === kind && r.i === i).reduce((a, r) => a + r.a, 0));
   const totals = months.map((_, k) => cards.reduce((a, c) => a + c.v[k], 0)), total = totals.reduce((a, b) => a + b, 0);
   const worstK = totals.reduce((b, v, k) => (v > (totals[b] ?? 0) ? k : b), 0);
   return {
-    months, cards, totals, total, all: inst.reduce((a, o) => a + o.a, 0),
-    last: inst.length ? Math.max(...inst.map(o => o.i)) : null,
+    months, cards, totals, cuotas: by('cuota'), pagos: by('pago'), rows, total, all: rows.reduce((a, r) => a + r.a, 0),
+    last: rows.length ? Math.max(...rows.map(r => r.i)) : null,
     worst: total > 0.005 ? { i: months[worstK], v: totals[worstK] } : null,
   };
 }

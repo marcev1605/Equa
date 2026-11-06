@@ -12,8 +12,8 @@ export function T({ tone = 'ink', size = 16, weight = 'regular', style, children
   return <RNText {...rest} style={[{ color, fontSize: size, fontFamily: font[weight], lineHeight: Math.round(size * 1.3) }, style]}>{children}</RNText>;
 }
 
-export const Money = ({ v, tone, size = 16, weight = 'semi', sign }: { v: number; tone?: Tone; size?: number; weight?: 'regular' | 'semi' | 'bold'; sign?: '+' | '−' }) =>
-  <T tone={tone} size={size} weight={weight}>{sign ?? ''}{fmtMoney(v)}</T>;
+export const Money = ({ v, tone, size = 16, weight = 'semi', sign, hide }: { v: number; tone?: Tone; size?: number; weight?: 'regular' | 'semi' | 'bold'; sign?: '+' | '−'; hide?: boolean }) =>
+  <T tone={tone} size={size} weight={weight}>{hide ? '$ ••••••' : `${sign ?? ''}${fmtMoney(v)}`}</T>;
 
 export function Card({ children, style, pad = 14 }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; pad?: number }) {
   const t = useTheme();

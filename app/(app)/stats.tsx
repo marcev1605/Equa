@@ -4,7 +4,9 @@ import { dd_mm, fmtMoney as fmt, monthName, monthShort } from '../../src/domain/
 import { sum } from '../../src/domain/engine';
 import { cardStats, categoryBadge, delta, expenseKinds, expensesByCategory, monthStats, pace, type Delta } from '../../src/domain/stats';
 import type { Occ } from '../../src/domain/types';
+import { lookOf } from '../../src/domain/cardLook';
 import { useStore } from '../../src/state/store';
+import { colorDef } from '../../src/ui/cardLook';
 import { Bar, Card, H2, Item, Money, Row, T } from '../../src/ui/kit';
 import { fixedTxt } from '../../src/ui/format';
 import { MonthNav, Screen } from '../../src/ui/Shell';
@@ -12,7 +14,7 @@ import { catColor, radius, useLayout, useTheme } from '../../src/ui/theme';
 
 export default function Estadisticas() {
   const { eng, cur, snap } = useStore(), L = useLayout(), t = useTheme();
-  const [openCat, setOpenCat] = useState<string[]>([]), [openSav, setOpenSav] = useState(false);
+  const [openCat, setOpenCat] = useState<string[]>([]), [openCard, setOpenCard] = useState<string[]>([]), [openSav, setOpenSav] = useState(false);
   const A = eng.all(), M = A.filter(o => o.i === cur);
   const ms = Array.from({ length: 6 }, (_, k) => cur - 5 + k), d = ms.map(i => { const m = A.filter(o => o.i === i); return [sum(m, 'in'), sum(m, 'out'), Math.max(0, eng.svMoves(i).reduce((a, x) => a + x.amt, 0))]; });   // [ingresos, gastos, ahorro neto del mes]
   const mx = Math.max(...d.flat(), 1);
@@ -83,18 +85,48 @@ export default function Estadisticas() {
     </Card>
   ) : null;
 
+  const names = eng.cardNames(), yr = (i: number) => `${monthName(i).toLowerCase()} ${Math.floor(i / 12)}`;
   const byCard = (
     <Card style={L.wide ? { marginTop: 0 } : undefined}>
       <H2>Por tarjeta</H2>
       {cardSt.cards.length ? (
         <>
-          {cardSt.cards.map((c, k) => (
-            <View key={c.name} accessibilityLabel={'Tarjeta ' + c.name} style={{ paddingVertical: 6, borderTopWidth: k ? 1 : 0, borderTopColor: t.line }}>
-              <Row><T size={14} weight="semi" style={{ flexShrink: 1 }}>{c.name}</T><T size={15} weight="bold">{fmt(c.spent)}</T></Row>
-              {c.pending > 0.005 ? <T tone="mute" size={13}>Cuotas pendientes: {fmt(c.pending)} en {c.pendingMonths} {c.pendingMonths === 1 ? 'mes' : 'meses'}</T> : null}
+          {cardSt.pending > 0.005 && cardSt.end != null ? (
+            <View accessibilityLabel="Deuda en cuotas" style={{ backgroundColor: t.bg, borderColor: t.line, borderWidth: 1, borderRadius: radius.sm, padding: 12, marginBottom: 4 }}>
+              <T tone="mute" size={13}>Debés en cuotas</T>
+              <T size={22} weight="bold">{fmt(cardSt.pending)}</T>
+              <T tone="mute" size={13}>Última cuota en {yr(cardSt.end)} · {cardSt.end - cur} {cardSt.end - cur === 1 ? 'mes' : 'meses'}</T>
             </View>
-          ))}
-          {cardSt.pending > 0.005 ? <View style={{ backgroundColor: t.bg, borderRadius: radius.sm, padding: 10, marginTop: 6 }}><T size={13}>Tenés <T size={13} weight="bold">{fmt(cardSt.pending)}</T> comprometidos en cuotas de aquí en adelante.</T></View> : null}
+          ) : null}
+          {cardSt.cards.map((c, k) => {
+            const color = colorDef(lookOf(snap.cardInfo, names, c.name).color).b2, pct = c.pending + c.paid > 0.005 ? Math.round((c.paid / (c.paid + c.pending)) * 100) : 0, op = openCard.includes(c.name);
+            return (
+              <View key={c.name} accessibilityLabel={'Tarjeta ' + c.name} style={{ paddingVertical: 10, borderTopWidth: k || cardSt.pending > 0.005 ? 1 : 0, borderTopColor: t.line }}>
+                <Row>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 }}><View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color }} /><T size={14} weight="semi" numberOfLines={1} style={{ flexShrink: 1 }}>{c.name}</T></View>
+                  <T size={15} weight="bold">{c.pending > 0.005 ? fmt(c.pending) : fmt(c.spent)}</T>
+                </Row>
+                {c.pending > 0.005 && c.end != null ? (
+                  <>
+                    <Bar pct={pct} color={color} />
+                    <Row><T tone="mute" size={13}>Pagaste {pct}%</T><T tone="mute" size={13}>Termina en {yr(c.end)}</T></Row>
+                    {c.spent > 0.005 ? <T tone="mute" size={13}>En {monthName(cur).toLowerCase()} pagás {fmt(c.spent)} con esta tarjeta</T> : null}
+                    <Pressable accessibilityRole="button" accessibilityLabel={(op ? 'Ocultar detalle de ' : 'Mostrar detalle de ') + c.name} accessibilityState={{ expanded: op }}
+                      onPress={() => setOpenCard(op ? openCard.filter(x => x !== c.name) : [...openCard, c.name])} style={{ alignSelf: 'flex-start', paddingTop: 8, paddingBottom: 2 }}>
+                      <T size={14} weight="bold" style={{ color: t.acc }}>{op ? 'Ocultar detalle ▴' : 'Mostrar detalle ▾'}</T>
+                    </Pressable>
+                    {op ? (
+                      <View accessibilityLabel={'Detalle de ' + c.name}>
+                        {c.plans.map((p, pi) => (
+                          <Item key={p.name + ':' + pi} first={pi === 0} title={p.name} sub={`${p.rem === 1 ? 'Falta 1 cuota' : `Faltan ${p.rem} cuotas`} de ${p.n} · termina en ${monthShort(p.end)}`} right={<Money v={p.left} tone="out" />} />
+                        ))}
+                      </View>
+                    ) : null}
+                  </>
+                ) : <T tone="mute" size={13}>{`Sin cuotas pendientes · en ${monthName(cur).toLowerCase()} pagás ${fmt(c.spent)}`}</T>}
+              </View>
+            );
+          })}
         </>
       ) : <T tone="mute" size={14}>Sin gastos con tarjeta este mes ni cuotas pendientes.</T>}
     </Card>

@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useTheme } from './theme';
 
-export type IconName = 'home' | 'trend' | 'card' | 'coin' | 'bars' | 'sliders' | 'down' | 'up' | 'plus' | 'deposit' | 'withdraw' | 'swap' | 'adjust';
+export type IconName = 'home' | 'trend' | 'card' | 'coin' | 'bars' | 'sliders' | 'down' | 'up' | 'plus' | 'deposit' | 'withdraw' | 'swap' | 'adjust' | 'search' | 'close' | 'eye' | 'eyeoff';
 
 /** Íconos de línea (24×24), iguales en web, iOS y Android. */
 export function Glyph({ name }: { name: IconName }) {
@@ -20,6 +20,10 @@ export function Glyph({ name }: { name: IconName }) {
     case 'swap': return <Path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4" />;
     case 'adjust': return <><Path d="M3.5 17.5 9.5 11l4 4 7-8" /><Path d="M15.5 7h5v5" /></>;
     case 'plus': return <Path d="M12 5v14M5 12h14" />;
+    case 'search': return <><Circle cx="11" cy="11" r="7" /><Path d="M20 20l-3.5-3.5" /></>;
+    case 'close': return <Path d="M6 6l12 12M18 6L6 18" />;
+    case 'eye': return <><Path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><Circle cx="12" cy="12" r="3" /></>;
+    case 'eyeoff': return <><Path d="M3 3l18 18" /><Path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7c1.6 0 3-.4 4.3-1M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>;
     case 'sliders': return <><Path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><Circle cx="15" cy="7" r="2.2" /><Circle cx="9" cy="17" r="2.2" /></>;
   }
 }
